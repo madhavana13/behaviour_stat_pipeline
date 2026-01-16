@@ -10,15 +10,11 @@ import pandas as pd
 _ID_RE = re.compile(r"(ID\d+)$")
 
 
-def extract_mouse_id(raw_id: Union[str, int]) -> str:
-    """
-    Extract canonical mouse_id from raw tracking identifiers.
-    Accepts either 'ID17' or strings ending in '_ID17' (or similar prefixes).
-    """
-    s = str(raw_id).strip()
-    m = _ID_RE.search(s)
-    if m is None:
-        raise ValueError(f"Could not extract mouse_id from raw id: {raw_id!r}")
+def extract_mouse_id(raw_id: str) -> str:
+    raw_id = str(raw_id)
+    m = re.search(r"(27[AB]_ID\d+)$", raw_id)
+    if not m:
+        raise ValueError(f"Could not extract unique mouse_id from: {raw_id}")
     return m.group(1)
 
 
@@ -55,15 +51,27 @@ def load_subjects(subjects_csv: Union[str, Path]) -> pd.DataFrame:
     return subjects
 
 
-def load_tracking_csv(path: Union[str, Path], raw_id_col: str = "Unnamed: 0") -> pd.DataFrame:
+def load_tracking_csv(path, raw_id_col: str = "Unnamed: 0"):
     df = pd.read_csv(path)
+
+    # Robust raw ID column detection
     if raw_id_col not in df.columns:
-        raise ValueError(
-            f"Raw ID column '{raw_id_col}' not found in {path}. "
-            f"Columns present: {list(df.columns)[:10]}..."
-        )
+        # Excel sometimes splits "Unnamed: 0" into two columns: "Unnamed" and "0"
+        if "Unnamed" in df.columns and "0" in df.columns and df["0"].isna().all():
+            raw_id_col = "Unnamed"
+            df = df.drop(columns=["0"])
+        # Fallback: first column looks like IDs
+        elif df.columns[0].lower().startswith("unnamed"):
+            raw_id_col = df.columns[0]
+        else:
+            raise ValueError(
+                f"Raw ID column not found. Tried '{raw_id_col}'. "
+                f"Columns present: {list(df.columns)[:10]}..."
+            )
+
     df = df.copy()
-    df["mouse_id"] = df[raw_id_col].apply(extract_mouse_id)
+    df["raw_id"] = df[raw_id_col].astype(str).str.strip()  # keep original identifier
+    df["mouse_id"] = df["raw_id"].apply(extract_mouse_id)
     return df
 
 
