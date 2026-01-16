@@ -7,14 +7,24 @@ from typing import Union
 import pandas as pd
 
 
-_ID_RE = re.compile(r"(ID\d+)$")
+_MOUSE_ID_RE = re.compile(r"([A-Za-z0-9]+_ID\d+)$")
 
 
-def extract_mouse_id(raw_id: str) -> str:
-    raw_id = str(raw_id)
-    m = re.search(r"(27[AB]_ID\d+)$", raw_id)
+def extract_mouse_id(raw_id: Union[str, int]) -> str:
+    """
+    Extract globally unique mouse identifier of the form '<room>_ID<digits>'
+    from the end of a raw identifier string.
+
+    Examples
+    --------
+    '01_HE2_VIT_27A_ID1'    -> '27A_ID1'
+    '01_HE2_VIT_TSE4_ID12'  -> 'TSE4_ID12'
+    'F3_ID7'               -> 'F3_ID7'
+    """
+    s = str(raw_id).strip()
+    m = _MOUSE_ID_RE.search(s)
     if not m:
-        raise ValueError(f"Could not extract unique mouse_id from: {raw_id}")
+        raise ValueError(f"Could not extract mouse_id from raw id: {raw_id!r}")
     return m.group(1)
 
 
@@ -51,26 +61,31 @@ def load_subjects(subjects_csv: Union[str, Path]) -> pd.DataFrame:
     return subjects
 
 
-def load_tracking_csv(path, raw_id_col: str = "Unnamed: 0"):
+def load_tracking_csv(path: Union[str, Path], raw_id_col: str = "Unnamed: 0") -> pd.DataFrame:
+    """
+    Load a tracking summary CSV and construct canonical identifiers.
+
+    Adds:
+      - raw_id   : original identifier string from file
+      - mouse_id : canonical globally unique id (via extract_mouse_id)
+    """
     df = pd.read_csv(path)
 
-    # Robust raw ID column detection
+    # Robust raw ID column detection (Excel can mangle "Unnamed: 0")
     if raw_id_col not in df.columns:
-        # Excel sometimes splits "Unnamed: 0" into two columns: "Unnamed" and "0"
         if "Unnamed" in df.columns and "0" in df.columns and df["0"].isna().all():
             raw_id_col = "Unnamed"
             df = df.drop(columns=["0"])
-        # Fallback: first column looks like IDs
         elif df.columns[0].lower().startswith("unnamed"):
             raw_id_col = df.columns[0]
         else:
             raise ValueError(
-                f"Raw ID column not found. Tried '{raw_id_col}'. "
+                f"Raw ID column '{raw_id_col}' not found in {path}. "
                 f"Columns present: {list(df.columns)[:10]}..."
             )
 
     df = df.copy()
-    df["raw_id"] = df[raw_id_col].astype(str).str.strip()  # keep original identifier
+    df["raw_id"] = df[raw_id_col].astype(str).str.strip()
     df["mouse_id"] = df["raw_id"].apply(extract_mouse_id)
     return df
 
