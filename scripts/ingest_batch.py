@@ -45,6 +45,8 @@ def infer_vit_timepoint_phase_from_filename(p: Path) -> tuple[str, str]:
 
 
 def main():
+    """Batch-ingest VIT tracking CSVs into one long-format dataset with
+    explicit mouse_id, timepoint (Before/After), and phase (hand/standing)."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--root", required=True, help="Folder to search recursively for CSVs")
     ap.add_argument(
