@@ -70,13 +70,16 @@ def run_vit(args: argparse.Namespace) -> None:
 
     out_path = Path(args.out) if args.out else Path("data/processed/VIT_processed.csv")
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    vit_processed.to_csv(out_path, index=False)
-
-    print(f"Saved: {out_path}")
-    print(
-        f"Rows: {len(vit_processed)} | Unique mice: {vit_processed['mouse_id'].nunique()} | Files: {len(files)}"
+    res = save_processed(
+        vit_processed,
+        out_csv=out_path,
+        assay="VIT",  # or OFT/EPM
+        files_n=len(files),
+        extra_lines=[],
     )
-    print(vit_processed[["timepoint", "phase", "group", "sex"]].value_counts().sort_index().to_string())
+    print(f"Saved: {res.out_csv}")
+    print(f"Summary: {res.out_summary}")
+
 
 def run_oft(args: argparse.Namespace) -> None:
     root = Path(args.root)
@@ -109,11 +112,16 @@ def run_oft(args: argparse.Namespace) -> None:
 
     out_path = Path(args.out) if args.out else Path("data/processed/OFT_processed.csv")
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    oft_processed.to_csv(out_path, index=False)
+    res = save_processed(
+        oft_processed,
+        out_csv=out_path,
+        assay="OFT",  # or OFT/EPM
+        files_n=len(files),
+        extra_lines=[],
+    )
+    print(f"Saved: {res.out_csv}")
+    print(f"Summary: {res.out_summary}")
 
-    print(f"Saved: {out_path}")
-    print(f"Rows: {len(oft_processed)} | Unique mice: {oft_processed['mouse_id'].nunique()} | Files: {len(files)}")
-    print(oft_processed[["timepoint", "group", "sex"]].value_counts().sort_index().to_string())
 
 def run_epm(args: argparse.Namespace) -> None:
     root = Path(args.root)
@@ -136,19 +144,24 @@ def run_epm(args: argparse.Namespace) -> None:
 
     epm_long = pd.concat(dfs, ignore_index=True)
     from behaviour_stat_pipeline.common.qc import warn_missing_subjects_coverage
-    warn_missing_subjects_coverage(epm_long["mouse_id"], subjects, where="EPM")
-
+    coverage_msg = warn_missing_subjects_coverage(epm_long["mouse_id"], subjects, where="EPM")
 
     qc_epm(epm_long)
     epm_processed = derive_epm_metrics(epm_long, cfg=EPMConfig())
 
     out_path = Path(args.out) if args.out else Path("data/processed/EPM_processed.csv")
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    epm_processed.to_csv(out_path, index=False)
+    extra = [coverage_msg] if coverage_msg else []
+    res = save_processed(
+        epm_processed,
+        out_csv=out_path,
+        assay="EPM",  # or OFT/EPM
+        files_n=len(files),
+        extra_lines=extra,
+    )
+    print(f"Saved: {res.out_csv}")
+    print(f"Summary: {res.out_summary}")
 
-    print(f"Saved: {out_path}")
-    print(f"Rows: {len(epm_processed)} | Unique mice: {epm_processed['mouse_id'].nunique()} | Files: {len(files)}")
-    print(epm_processed[["timepoint", "group", "sex"]].value_counts().sort_index().to_string())
 
 def run_nor(args: argparse.Namespace) -> None:
     root = Path(args.root)
@@ -176,11 +189,11 @@ def run_nor(args: argparse.Namespace) -> None:
 
             dfs.append(df)
         out = pd.concat(dfs, ignore_index=True)
-        warn_missing_subjects_coverage(out["mouse_id"], subjects, where=f"NOR {session}")
-        return out
+        coverage_msg = warn_missing_subjects_coverage(out["mouse_id"], subjects, where=f"NOR {session}")
+        return out, coverage_msg
 
-    fam = _load(fam_files, "FAM")
-    test = _load(test_files, "TEST")
+    fam, coverage_fam_msg = _load(fam_files, "FAM")
+    test, coverage_test_msg = _load(test_files, "TEST")
 
     nor_processed = derive_nor_metrics(fam, test, cfg=NORConfig())
     print(summarize_nor_sanity(nor_processed, min_total_s=20.0))
@@ -189,13 +202,14 @@ def run_nor(args: argparse.Namespace) -> None:
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     sanity = summarize_nor_sanity(nor_processed, min_total_s=20.0)
+    extra_lines = [m for m in [coverage_fam_msg, coverage_test_msg, sanity] if m]
 
     res = save_processed(
         nor_processed,
         out_csv=out_path,
         assay="NOR",
         files_n=len(fam_files) + len(test_files),
-        extra_lines=[sanity],
+        extra_lines=extra_lines,
     )
 
     print(f"Saved: {res.out_csv}")
