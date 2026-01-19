@@ -10,7 +10,7 @@ from behaviour_stat_pipeline.assays.vit import qc_vit, derive_vit_metrics, VITCo
 from behaviour_stat_pipeline.assays.oft import qc_oft, derive_oft_metrics, OFTConfig
 from behaviour_stat_pipeline.assays.epm import qc_epm, derive_epm_metrics, EPMConfig
 from behaviour_stat_pipeline.common.qc import warn_missing_subjects_coverage
-from behaviour_stat_pipeline.assays.nor import derive_nor_metrics, NORConfig
+from behaviour_stat_pipeline.assays.nor import derive_nor_metrics, NORConfig, summarize_nor_sanity
 
 
 # Reuse ingestion logic
@@ -181,6 +181,7 @@ def run_nor(args: argparse.Namespace) -> None:
     test = _load(test_files, "TEST")
 
     nor_processed = derive_nor_metrics(fam, test, cfg=NORConfig())
+    print(summarize_nor_sanity(nor_processed, min_total_s=20.0))
 
     out_path = Path(args.out) if args.out else Path("data/processed/NOR_processed.csv")
     out_path.parent.mkdir(parents=True, exist_ok=True)
