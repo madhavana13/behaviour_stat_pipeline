@@ -14,11 +14,10 @@ This module is intentionally narrow:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable
 
-import numpy as np
 import pandas as pd
 
+from behaviour_stat_pipeline.common.qc import assert_unique_key
 
 REQUIRED_COLUMNS = {"mouse_id", "group", "sex", "timepoint", "phase"}
 ALLOWED_TIMEPOINTS = {"Before", "After"}
@@ -51,21 +50,14 @@ def qc_vit(df: pd.DataFrame) -> None:
     if bad_ph:
         raise ValueError(f"VIT QC failed: unexpected phase values: {sorted(bad_ph)}")
 
-    # uniqueness
-    key = ["mouse_id", "timepoint", "phase"]
-    if df.duplicated(subset=key).any():
-        examples = df.loc[df.duplicated(subset=key, keep=False), key].head(20)
-        raise ValueError(
-            "VIT QC failed: duplicate rows for mouse_id × timepoint × phase.\n"
-            f"Examples:\n{examples.to_string(index=False)}"
-        )
+    # uniqueness (reusable QC primitive)
+    assert_unique_key(df, ["mouse_id", "timepoint", "phase"], where="VIT long")
 
     # basic missingness in metadata
     for col in ["mouse_id", "group", "sex"]:
         if df[col].isna().any():
             raise ValueError(f"VIT QC failed: NA values found in column '{col}'")
 
-    # quick balance print suggestion (not enforced)
     # We intentionally do not enforce perfect balance here, since later datasets may be unbalanced.
 
 
@@ -92,13 +84,6 @@ def derive_vit_metrics(df: pd.DataFrame, cfg: VITConfig | None = None) -> pd.Dat
     # deterministic coding
     out["is_after"] = (out["timepoint"] == "After").astype(int)
     out["is_hand"] = (out["phase"] == "hand").astype(int)
-
-    # NOTE: We do NOT compute effect-size-like change scores by default because
-    # they depend on which raw outcome column you treat as primary.
-    # When you pick primary outcomes (e.g., time_in_hand_quadrant or contact_time),
-    # we can add:
-    #   delta_hand = hand_after - hand_before
-    # without altering the raw table.
 
     return out
 
