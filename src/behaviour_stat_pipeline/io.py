@@ -90,14 +90,36 @@ def load_tracking_csv(path: Union[str, Path], raw_id_col: str = "Unnamed: 0") ->
     return df
 
 
-def merge_subject_metadata(df: pd.DataFrame, subjects: pd.DataFrame) -> pd.DataFrame:
+def merge_subject_metadata(
+    df: pd.DataFrame,
+    subjects: pd.DataFrame,
+    *,
+    on_missing_subjects: str = "warn_drop",  # {"error", "warn_drop"}
+) -> pd.DataFrame:
+
     out = df.merge(subjects, on="mouse_id", how="left", validate="many_to_one")
 
     if out["group"].isna().any() or out["sex"].isna().any():
         missing_ids = out.loc[out["group"].isna() | out["sex"].isna(), "mouse_id"].unique()
-        raise ValueError(
-            "Some mouse_ids in the tracking CSV are missing from subjects.csv: "
-            f"{sorted(missing_ids)}"
-        )
+        missing_ids_sorted = sorted(map(str, missing_ids))
+
+        if on_missing_subjects == "error":
+            raise ValueError(
+                "Some mouse_ids in the tracking CSV are missing from subjects.csv: "
+                f"{missing_ids_sorted}"
+            )
+
+        if on_missing_subjects == "warn_drop":
+            print(
+                "WARNING: Some mouse_ids in the tracking CSV are missing from subjects.csv. "
+                "Dropping these rows.\n"
+                f"Missing mouse_ids ({len(missing_ids_sorted)}): {missing_ids_sorted}"
+            )
+            out = out.loc[~(out["group"].isna() | out["sex"].isna())].copy()
+        else:
+            raise ValueError(
+                f"Invalid on_missing_subjects={on_missing_subjects!r}. "
+                "Use 'error' or 'warn_drop'."
+            )
 
     return out
