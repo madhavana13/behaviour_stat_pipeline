@@ -7,25 +7,22 @@ from typing import Union
 import pandas as pd
 
 
-_MOUSE_ID_RE = re.compile(r"([A-Za-z0-9]+_ID\d+)$")
+_MOUSE_ID_PATTERNS = [
+    # NOR-style: 27A_FAM_ID9 or 27B_TEST_ID15
+    re.compile(r"(?P<cage>\d+[A-Z]?)_(?:FAM|TEST)_ID(?P<num>\d+)\b", re.IGNORECASE),
+    # Generic: 27A_ID9
+    re.compile(r"(?P<cage>\d+[A-Z]?)_ID(?P<num>\d+)\b", re.IGNORECASE),
+]
 
 
-def extract_mouse_id(raw_id: Union[str, int]) -> str:
-    """
-    Extract globally unique mouse identifier of the form '<room>_ID<digits>'
-    from the end of a raw identifier string.
+def extract_mouse_id(raw: str) -> str:
+    s = str(raw)
+    for pat in _MOUSE_ID_PATTERNS:
+        m = pat.search(s)
+        if m:
+            return f"{m.group('cage')}_ID{m.group('num')}"
+    raise ValueError(f"Could not extract mouse_id from raw identifier: {raw!r}")
 
-    Examples
-    --------
-    '01_HE2_VIT_27A_ID1'    -> '27A_ID1'
-    '01_HE2_VIT_TSE4_ID12'  -> 'TSE4_ID12'
-    'F3_ID7'               -> 'F3_ID7'
-    """
-    s = str(raw_id).strip()
-    m = _MOUSE_ID_RE.search(s)
-    if not m:
-        raise ValueError(f"Could not extract mouse_id from raw id: {raw_id!r}")
-    return m.group(1)
 
 
 def load_subjects(subjects_csv: Union[str, Path]) -> pd.DataFrame:

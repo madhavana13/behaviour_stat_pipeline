@@ -9,7 +9,8 @@ import pandas as pd
 from behaviour_stat_pipeline.assays.vit import qc_vit, derive_vit_metrics, VITConfig
 from behaviour_stat_pipeline.assays.oft import qc_oft, derive_oft_metrics, OFTConfig
 from behaviour_stat_pipeline.assays.epm import qc_epm, derive_epm_metrics, EPMConfig
-
+from behaviour_stat_pipeline.common.qc import warn_missing_subjects_coverage
+from behaviour_stat_pipeline.assays.nor import derive_nor_metrics, NORConfig
 
 
 # Reuse ingestion logic
@@ -147,11 +148,53 @@ def run_epm(args: argparse.Namespace) -> None:
     print(f"Rows: {len(epm_processed)} | Unique mice: {epm_processed['mouse_id'].nunique()} | Files: {len(files)}")
     print(epm_processed[["timepoint", "group", "sex"]].value_counts().sort_index().to_string())
 
+def run_nor(args: argparse.Namespace) -> None:
+    root = Path(args.root)
+
+    fam_files = sorted(root.rglob("*FAM*_output_summary.csv"))
+    test_files = sorted(root.rglob("*TEST*_output_summary.csv"))
+
+    if not fam_files:
+        raise FileNotFoundError(f"No FAM files found under {root} matching *FAM*_output_summary.csv")
+    if not test_files:
+        raise FileNotFoundError(f"No TEST files found under {root} matching *TEST*_output_summary.csv")
+
+    subjects = load_subjects(args.subjects)
+
+    def _load(files: list[Path], session: str) -> pd.DataFrame:
+        dfs = []
+        for f in files:
+            df = load_tracking_csv(f, raw_id_col=args.raw_id_col)
+            df = merge_subject_metadata(df, subjects, on_missing_subjects="warn_drop")
+
+            df["assay"] = "NOR"
+            df["source_file"] = str(f)
+            df["timepoint"] = "Single"   # per your current plan: analyze sessions separately across runs
+            df["session"] = session
+
+            dfs.append(df)
+        out = pd.concat(dfs, ignore_index=True)
+        warn_missing_subjects_coverage(out["mouse_id"], subjects, where=f"NOR {session}")
+        return out
+
+    fam = _load(fam_files, "FAM")
+    test = _load(test_files, "TEST")
+
+    nor_processed = derive_nor_metrics(fam, test, cfg=NORConfig())
+
+    out_path = Path(args.out) if args.out else Path("data/processed/NOR_processed.csv")
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    nor_processed.to_csv(out_path, index=False)
+
+    print(f"Saved: {out_path}")
+    print(f"Rows: {len(nor_processed)} | Unique mice: {nor_processed['mouse_id'].nunique()}")
+    print(nor_processed[["group", "sex"]].value_counts().sort_index().to_string())
 
 ASSAY_RUNNERS = {
     "VIT": run_vit, 
     "OFT": run_oft,
     "EPM": run_epm,
+    "NOR": run_nor,
 }
 
 
