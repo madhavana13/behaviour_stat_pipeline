@@ -8,6 +8,8 @@ import pandas as pd
 # Assay modules
 from behaviour_stat_pipeline.assays.vit import qc_vit, derive_vit_metrics, VITConfig
 from behaviour_stat_pipeline.assays.oft import qc_oft, derive_oft_metrics, OFTConfig
+from behaviour_stat_pipeline.assays.epm import qc_epm, derive_epm_metrics, EPMConfig
+
 
 
 # Reuse ingestion logic
@@ -105,11 +107,43 @@ def run_oft(args: argparse.Namespace) -> None:
     print(f"Saved: {out_path}")
     print(f"Rows: {len(oft_processed)} | Unique mice: {oft_processed['mouse_id'].nunique()} | Files: {len(files)}")
     print(oft_processed[["timepoint", "group", "sex"]].value_counts().sort_index().to_string())
+def run_epm(args: argparse.Namespace) -> None:
+    root = Path(args.root)
+    files = sorted(root.rglob(args.pattern))
+    if not files:
+        raise FileNotFoundError(f"No files found under {root} matching {args.pattern}")
+
+    subjects = load_subjects(args.subjects)
+
+    dfs = []
+    for f in files:
+        df = load_tracking_csv(f, raw_id_col=args.raw_id_col)
+        df = merge_subject_metadata(df, subjects)
+
+        df["assay"] = "EPM"
+        df["source_file"] = str(f)
+        df["timepoint"] = "Single"  # session label for now
+
+        dfs.append(df)
+
+    epm_long = pd.concat(dfs, ignore_index=True)
+
+    qc_epm(epm_long)
+    epm_processed = derive_epm_metrics(epm_long, cfg=EPMConfig())
+
+    out_path = Path(args.out) if args.out else Path("data/processed/EPM_processed.csv")
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    epm_processed.to_csv(out_path, index=False)
+
+    print(f"Saved: {out_path}")
+    print(f"Rows: {len(epm_processed)} | Unique mice: {epm_processed['mouse_id'].nunique()} | Files: {len(files)}")
+    print(epm_processed[["timepoint", "group", "sex"]].value_counts().sort_index().to_string())
 
 
 ASSAY_RUNNERS = {
     "VIT": run_vit, 
     "OFT": run_oft,
+    "EPM": run_epm,
 }
 
 
