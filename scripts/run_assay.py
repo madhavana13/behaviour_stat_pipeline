@@ -11,6 +11,8 @@ from behaviour_stat_pipeline.assays.oft import qc_oft, derive_oft_metrics, OFTCo
 from behaviour_stat_pipeline.assays.epm import qc_epm, derive_epm_metrics, EPMConfig
 from behaviour_stat_pipeline.common.qc import warn_missing_subjects_coverage
 from behaviour_stat_pipeline.assays.nor import derive_nor_metrics, NORConfig, summarize_nor_sanity
+from behaviour_stat_pipeline.common.derive import save_processed
+
 
 
 # Reuse ingestion logic
@@ -185,11 +187,19 @@ def run_nor(args: argparse.Namespace) -> None:
 
     out_path = Path(args.out) if args.out else Path("data/processed/NOR_processed.csv")
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    nor_processed.to_csv(out_path, index=False)
 
-    print(f"Saved: {out_path}")
-    print(f"Rows: {len(nor_processed)} | Unique mice: {nor_processed['mouse_id'].nunique()}")
-    print(nor_processed[["group", "sex"]].value_counts().sort_index().to_string())
+    sanity = summarize_nor_sanity(nor_processed, min_total_s=20.0)
+
+    res = save_processed(
+        nor_processed,
+        out_csv=out_path,
+        assay="NOR",
+        files_n=len(fam_files) + len(test_files),
+        extra_lines=[sanity],
+    )
+
+    print(f"Saved: {res.out_csv}")
+    print(f"Summary: {res.out_summary}")
 
 ASSAY_RUNNERS = {
     "VIT": run_vit, 
