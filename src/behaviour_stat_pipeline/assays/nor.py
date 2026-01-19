@@ -115,7 +115,46 @@ def _safe_pi(novel: pd.Series, familiar: pd.Series) -> pd.Series:
     denom = novel + familiar
     out = novel / denom.replace(0, np.nan)
     return out
+def add_nor_sanity_flags(df: pd.DataFrame, *, min_total_s: float = 20.0) -> pd.DataFrame:
+    """
+    Add non-destructive sanity flags for NOR.
 
+    Flags are advisory only (no rows dropped):
+    - *_no_explore: total == 0
+    - *_low_explore: total < min_total_s (default 20s)
+    """
+    out = df.copy()
+
+    out["test_total_explore_time"] = out["test_novel_explore_time"] + out["test_familiar_explore_time"]
+    out["test_total_iz_time"] = out["test_novel_iz_time"] + out["test_familiar_iz_time"]
+
+    out["explore_no_explore"] = out["test_total_explore_time"] == 0
+    out["iz_no_explore"] = out["test_total_iz_time"] == 0
+
+    out["explore_low_explore"] = out["test_total_explore_time"] < float(min_total_s)
+    out["iz_low_explore"] = out["test_total_iz_time"] < float(min_total_s)
+
+    return out
+
+
+def summarize_nor_sanity(df: pd.DataFrame, *, min_total_s: float = 20.0) -> str:
+    n = len(df)
+    if n == 0:
+        return "NOR sanity: no rows."
+
+    no_explore = int((df["test_total_explore_time"] == 0).sum())
+    low_explore = int((df["test_total_explore_time"] < float(min_total_s)).sum())
+
+    no_iz = int((df["test_total_iz_time"] == 0).sum())
+    low_iz = int((df["test_total_iz_time"] < float(min_total_s)).sum())
+
+    return (
+        "NOR sanity:\n"
+        f"- TEST exploration total == 0s: {no_explore}/{n}\n"
+        f"- TEST exploration total < {min_total_s:g}s: {low_explore}/{n}\n"
+        f"- TEST interaction-zone total == 0s: {no_iz}/{n}\n"
+        f"- TEST interaction-zone total < {min_total_s:g}s: {low_iz}/{n}"
+    )
 
 def derive_nor_metrics(
     fam: pd.DataFrame,
@@ -231,6 +270,7 @@ def derive_nor_metrics(
 
     # Project invariant: processed must be unique at mouse_id × timepoint
     assert_unique_key(merged, ["mouse_id", "timepoint"], where="NOR processed")
+    merged = add_nor_sanity_flags(merged, min_total_s=20.0)
 
     return merged
 
