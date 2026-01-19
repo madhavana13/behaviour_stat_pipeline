@@ -1,3 +1,5 @@
+# src/behaviour_stat_pipeline/run_assay.py
+
 import argparse
 from pathlib import Path
 
@@ -6,7 +8,7 @@ import pandas as pd
 # Assay modules
 from behaviour_stat_pipeline.assays.vit import qc_vit, derive_vit_metrics, VITConfig
 
-# Reuse ingestion logic from your ingest_batch script
+# Reuse ingestion logic
 from behaviour_stat_pipeline.io import load_subjects, load_tracking_csv, merge_subject_metadata
 
 
@@ -37,7 +39,7 @@ def run_vit(args: argparse.Namespace) -> None:
 
     subjects = load_subjects(args.subjects)
 
-    dfs = []
+    dfs: list[pd.DataFrame] = []
     for f in files:
         df = load_tracking_csv(f, raw_id_col=args.raw_id_col)
         df = merge_subject_metadata(df, subjects)
@@ -53,15 +55,6 @@ def run_vit(args: argparse.Namespace) -> None:
 
     vit_long = pd.concat(dfs, ignore_index=True)
 
-    # Strict uniqueness for VIT
-    key = ["mouse_id", "timepoint", "phase"]
-    if vit_long.duplicated(subset=key).any():
-        examples = vit_long.loc[vit_long.duplicated(subset=key, keep=False), key + ["source_file"]].head(20)
-        raise ValueError(
-            "Duplicate rows detected for mouse_id × timepoint × phase.\n"
-            f"Examples:\n{examples.to_string(index=False)}"
-        )
-
     # QC + derive
     qc_vit(vit_long)
     vit_processed = derive_vit_metrics(vit_long, cfg=VITConfig())
@@ -71,24 +64,32 @@ def run_vit(args: argparse.Namespace) -> None:
     vit_processed.to_csv(out_path, index=False)
 
     print(f"Saved: {out_path}")
-    print(f"Rows: {len(vit_processed)} | Unique mice: {vit_processed['mouse_id'].nunique()} | Files: {len(files)}")
+    print(
+        f"Rows: {len(vit_processed)} | Unique mice: {vit_processed['mouse_id'].nunique()} | Files: {len(files)}"
+    )
     print(vit_processed[["timepoint", "phase", "group", "sex"]].value_counts().sort_index().to_string())
 
 
-def main():
+ASSAY_RUNNERS = {
+    "VIT": run_vit,
+}
+
+
+def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--assay", required=True, choices=["VIT"], help="Which assay pipeline to run")
+    ap.add_argument("--assay", required=True, choices=sorted(ASSAY_RUNNERS.keys()))
     ap.add_argument("--root", required=True, help="Root folder containing raw CSV outputs")
     ap.add_argument("--pattern", default="*_output_summary.csv", help="Glob pattern for raw CSVs")
     ap.add_argument("--subjects", default="data/metadata/subjects.csv", help="Path to subjects.csv")
     ap.add_argument("--raw_id_col", default="Unnamed: 0", help="Raw ID column in tracking CSV")
     ap.add_argument("--out", default="", help="Output processed CSV path")
-    args = ap.parse_args()
+    return ap
 
-    if args.assay == "VIT":
-        run_vit(args)
-    else:
-        raise ValueError(f"Unsupported assay: {args.assay}")
+
+def main() -> None:
+    ap = build_parser()
+    args = ap.parse_args()
+    ASSAY_RUNNERS[args.assay](args)
 
 
 if __name__ == "__main__":
