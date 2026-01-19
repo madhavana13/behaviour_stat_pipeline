@@ -86,7 +86,12 @@ def qc_nor(fam: pd.DataFrame, test: pd.DataFrame) -> None:
         raise ValueError(f"NOR QC failed (FAM): missing object columns: {miss_fam_obj}")
     if miss_test_obj:
         raise ValueError(f"NOR QC failed (TEST): missing object columns: {miss_test_obj}")
-
+    
+    for col in ["raw_id", "source_file"]:
+        if col not in fam.columns:
+            raise ValueError(f"NOR QC failed (FAM): missing provenance column '{col}'")
+        if col not in test.columns:
+            raise ValueError(f"NOR QC failed (TEST): missing provenance column '{col}'")
 
 def _infer_familiar_type_from_fam_row(row: pd.Series) -> FamiliarType:
     flask_any = (row[FAM_EXPLORE_FLASK + FAM_IZ_FLASK] > 0).any()
@@ -182,6 +187,10 @@ def derive_nor_metrics(
     fam = fam.copy()
     test = test.copy()
 
+    # Preserve provenance for auditability
+    fam = fam.rename(columns={"raw_id": "raw_id_fam", "source_file": "source_file_fam"})
+    test = test.rename(columns={"raw_id": "raw_id_test", "source_file": "source_file_test"})
+
     flask_any = (fam[FAM_EXPLORE_FLASK + FAM_IZ_FLASK] > 0).any(axis=1)
     tower_any = (fam[FAM_EXPLORE_TOWER + FAM_IZ_TOWER] > 0).any(axis=1)
 
@@ -215,8 +224,8 @@ def derive_nor_metrics(
 
     # Merge fam + test (inner join keeps only mice with both sessions)
     id_cols = ["mouse_id", "group", "sex", "timepoint"]
-    keep_fam = id_cols + ["familiar_type", "fam_familiar_explore_time", "fam_familiar_iz_time"]
-    keep_test = id_cols + [TEST_EXPLORE_FLASK, TEST_EXPLORE_TOWER, TEST_IZ_FLASK, TEST_IZ_TOWER]
+    keep_fam = id_cols + ["raw_id_fam", "source_file_fam","familiar_type", "fam_familiar_explore_time", "fam_familiar_iz_time"]
+    keep_test = id_cols + ["raw_id_test", "source_file_test", TEST_EXPLORE_FLASK, TEST_EXPLORE_TOWER, TEST_IZ_FLASK, TEST_IZ_TOWER]
 
     merged = fam[keep_fam].merge(
         test[keep_test],
