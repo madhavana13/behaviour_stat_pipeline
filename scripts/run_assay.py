@@ -6,7 +6,7 @@ from pathlib import Path
 import pandas as pd
 
 # Assay modules
-from behaviour_stat_pipeline.assays.vit import qc_vit, derive_vit_metrics, VITConfig
+from behaviour_stat_pipeline.assays.vit import qc_vit, derive_vit_metrics, VITConfig, vit_missing_cells_report
 from behaviour_stat_pipeline.assays.oft import qc_oft, derive_oft_metrics, OFTConfig
 from behaviour_stat_pipeline.assays.epm import qc_epm, derive_epm_metrics, EPMConfig
 from behaviour_stat_pipeline.common.qc import warn_missing_subjects_coverage
@@ -61,8 +61,8 @@ def run_vit(args: argparse.Namespace) -> None:
         dfs.append(df)
 
     vit_long = pd.concat(dfs, ignore_index=True)
-    from behaviour_stat_pipeline.common.qc import warn_missing_subjects_coverage
-    warn_missing_subjects_coverage(vit_long["mouse_id"], subjects, where="VIT")
+    completeness_msg = vit_missing_cells_report(vit_long)
+    coverage_msg = warn_missing_subjects_coverage(vit_long["mouse_id"], subjects, where="VIT")
 
     # QC + derive
     qc_vit(vit_long)
@@ -70,12 +70,14 @@ def run_vit(args: argparse.Namespace) -> None:
 
     out_path = Path(args.out) if args.out else Path("data/processed/VIT_processed.csv")
     out_path.parent.mkdir(parents=True, exist_ok=True)
+    extra_lines = [m for m in [coverage_msg, completeness_msg] if m]
+
     res = save_processed(
         vit_processed,
         out_csv=out_path,
-        assay="VIT",  # or OFT/EPM
+        assay="VIT",
         files_n=len(files),
-        extra_lines=[],
+        extra_lines=extra_lines,
     )
     print(f"Saved: {res.out_csv}")
     print(f"Summary: {res.out_summary}")
@@ -104,7 +106,7 @@ def run_oft(args: argparse.Namespace) -> None:
 
     oft_long = pd.concat(dfs, ignore_index=True)
     from behaviour_stat_pipeline.common.qc import warn_missing_subjects_coverage
-    warn_missing_subjects_coverage(oft_long["mouse_id"], subjects, where="OFT")
+    coverage_msg = warn_missing_subjects_coverage(oft_long["mouse_id"], subjects, where="OFT")
 
     # QC + derive
     qc_oft(oft_long)
@@ -112,12 +114,14 @@ def run_oft(args: argparse.Namespace) -> None:
 
     out_path = Path(args.out) if args.out else Path("data/processed/OFT_processed.csv")
     out_path.parent.mkdir(parents=True, exist_ok=True)
+    extra_lines = [coverage_msg] if coverage_msg else []
+
     res = save_processed(
         oft_processed,
         out_csv=out_path,
-        assay="OFT",  # or OFT/EPM
+        assay="OFT",
         files_n=len(files),
-        extra_lines=[],
+        extra_lines=extra_lines,
     )
     print(f"Saved: {res.out_csv}")
     print(f"Summary: {res.out_summary}")

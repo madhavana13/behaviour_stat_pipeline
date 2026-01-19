@@ -34,12 +34,14 @@ def warn_missing_subjects_coverage(
     subjects: pd.DataFrame,
     *,
     where: str = "",
-) -> None:
+) -> str:
     subj_ids = set(subjects["mouse_id"].astype(str))
     obs_ids = set(observed_mouse_ids.dropna().astype(str))
     missing = sorted(subj_ids - obs_ids)
     if missing:
         tag = f" [{where}]" if where else ""
-        print(
-            f"WARNING{tag}: {len(missing)} subject mouse_ids not present in this run's data: {missing}"
-        )
+        msg = f"WARNING{tag}: {len(missing)} subject mouse_ids not present in this run's data: {missing}"
+        print(msg)
+        return msg
+    return ""
+

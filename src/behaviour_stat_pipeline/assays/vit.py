@@ -19,6 +19,56 @@ import pandas as pd
 
 from behaviour_stat_pipeline.common.qc import assert_unique_key
 
+def vit_missing_cells_report(df: pd.DataFrame) -> str:
+    """
+    Report missing mouse_id × timepoint × phase cells.
+
+    Intended for logging only (no dropping).
+    """
+    required = {"mouse_id", "timepoint", "phase"}
+    missing_cols = required - set(df.columns)
+    if missing_cols:
+        return f"VIT completeness: cannot evaluate (missing columns: {sorted(missing_cols)})"
+
+    expected_cells = [("Before", "hand"), ("Before", "standing"), ("After", "hand"), ("After", "standing")]
+
+    mice = pd.Index(sorted(df["mouse_id"].dropna().astype(str).unique()), name="mouse_id")
+
+    # observed cells per mouse
+    obs = (
+        df[["mouse_id", "timepoint", "phase"]]
+        .dropna()
+        .drop_duplicates()
+        .set_index(["mouse_id", "timepoint", "phase"])
+        .sort_index()
+    )
+
+    # full expected index
+    full = pd.MultiIndex.from_tuples(
+        [(mid, tp, ph) for mid in mice for tp, ph in expected_cells],
+        names=["mouse_id", "timepoint", "phase"],
+    )
+
+    missing_idx = full.difference(obs.index)
+    if len(missing_idx) == 0:
+        return "VIT completeness: OK (all mouse_id × timepoint × phase cells present)."
+
+    miss_df = missing_idx.to_frame(index=False)
+
+    per_mouse = (
+        miss_df.groupby("mouse_id")[["timepoint", "phase"]]
+        .apply(lambda x: [f"{tp}:{ph}" for tp, ph in x.to_numpy()])
+        .to_dict()
+    )
+
+    examples = list(per_mouse.items())[:10]
+    example_str = "; ".join([f"{mid} -> {cells}" for mid, cells in examples])
+
+    return (
+        f"VIT completeness WARNING: {len(per_mouse)}/{len(mice)} mice missing ≥1 cell.\n"
+        f"Examples (up to 10): {example_str}"
+    )
+
 REQUIRED_COLUMNS = {"mouse_id", "group", "sex", "timepoint", "phase"}
 ALLOWED_TIMEPOINTS = {"Before", "After"}
 ALLOWED_PHASES = {"hand", "standing"}
