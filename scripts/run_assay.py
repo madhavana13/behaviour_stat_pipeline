@@ -46,7 +46,7 @@ def run_vit(args: argparse.Namespace) -> None:
     dfs: list[pd.DataFrame] = []
     for f in files:
         df = load_tracking_csv(f, raw_id_col=args.raw_id_col)
-        df = merge_subject_metadata(df, subjects)
+        df = merge_subject_metadata(df, subjects, on_missing_subjects="warn_drop")
 
         df["assay"] = "VIT"
         df["source_file"] = str(f)
@@ -58,6 +58,8 @@ def run_vit(args: argparse.Namespace) -> None:
         dfs.append(df)
 
     vit_long = pd.concat(dfs, ignore_index=True)
+    from behaviour_stat_pipeline.common.qc import warn_missing_subjects_coverage
+    warn_missing_subjects_coverage(vit_long["mouse_id"], subjects, where="VIT")
 
     # QC + derive
     qc_vit(vit_long)
@@ -84,7 +86,7 @@ def run_oft(args: argparse.Namespace) -> None:
     dfs = []
     for f in files:
         df = load_tracking_csv(f, raw_id_col=args.raw_id_col)
-        df = merge_subject_metadata(df, subjects)
+        df = merge_subject_metadata(df, subjects, on_missing_subjects="warn_drop")
 
         df["assay"] = "OFT"
         df["source_file"] = str(f)
@@ -95,6 +97,8 @@ def run_oft(args: argparse.Namespace) -> None:
         dfs.append(df)
 
     oft_long = pd.concat(dfs, ignore_index=True)
+    from behaviour_stat_pipeline.common.qc import warn_missing_subjects_coverage
+    warn_missing_subjects_coverage(oft_long["mouse_id"], subjects, where="OFT")
 
     # QC + derive
     qc_oft(oft_long)
@@ -107,6 +111,7 @@ def run_oft(args: argparse.Namespace) -> None:
     print(f"Saved: {out_path}")
     print(f"Rows: {len(oft_processed)} | Unique mice: {oft_processed['mouse_id'].nunique()} | Files: {len(files)}")
     print(oft_processed[["timepoint", "group", "sex"]].value_counts().sort_index().to_string())
+
 def run_epm(args: argparse.Namespace) -> None:
     root = Path(args.root)
     files = sorted(root.rglob(args.pattern))
@@ -118,7 +123,7 @@ def run_epm(args: argparse.Namespace) -> None:
     dfs = []
     for f in files:
         df = load_tracking_csv(f, raw_id_col=args.raw_id_col)
-        df = merge_subject_metadata(df, subjects)
+        df = merge_subject_metadata(df, subjects, on_missing_subjects="warn_drop")
 
         df["assay"] = "EPM"
         df["source_file"] = str(f)
@@ -127,6 +132,9 @@ def run_epm(args: argparse.Namespace) -> None:
         dfs.append(df)
 
     epm_long = pd.concat(dfs, ignore_index=True)
+    from behaviour_stat_pipeline.common.qc import warn_missing_subjects_coverage
+    warn_missing_subjects_coverage(epm_long["mouse_id"], subjects, where="EPM")
+
 
     qc_epm(epm_long)
     epm_processed = derive_epm_metrics(epm_long, cfg=EPMConfig())

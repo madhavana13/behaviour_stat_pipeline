@@ -28,3 +28,18 @@ def assert_unique_key(df: pd.DataFrame, key: Sequence[str], *, where: str = "") 
 
 def _fmt_where(where: str) -> str:
     return f" [{where}]" if where else ""
+
+def warn_missing_subjects_coverage(
+    observed_mouse_ids: pd.Series,
+    subjects: pd.DataFrame,
+    *,
+    where: str = "",
+) -> None:
+    subj_ids = set(subjects["mouse_id"].astype(str))
+    obs_ids = set(observed_mouse_ids.dropna().astype(str))
+    missing = sorted(subj_ids - obs_ids)
+    if missing:
+        tag = f" [{where}]" if where else ""
+        print(
+            f"WARNING{tag}: {len(missing)} subject mouse_ids not present in this run's data: {missing}"
+        )
