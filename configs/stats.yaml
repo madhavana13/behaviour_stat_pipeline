@@ -73,6 +73,8 @@ diagnostics:
       - test_novel_iz_time
       - di_explore
       - di_iz
+      - fam_total distance moved
+      - test_total distance moved
     oft: []
     epm: []
     vit: []
@@ -86,6 +88,20 @@ secondary_two_way_anova:
   factor_orders:
     group: []                 # empty = infer deterministically
     sex: ["female", "male"]   # lock ordering
+
+  endpoints:
+    nor:
+      - test_familiar_explore_time
+      - test_novel_explore_time
+      - test_familiar_iz_time
+      - test_novel_iz_time
+      - di_explore
+      - di_iz
+      - fam_total distance moved
+      - test_total distance moved
+    oft: []
+    epm: []
+    vit: []
 
   posthoc:
     enabled: true
