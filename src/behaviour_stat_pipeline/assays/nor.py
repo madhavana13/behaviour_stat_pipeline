@@ -139,27 +139,67 @@ def add_nor_sanity_flags(df: pd.DataFrame, *, min_total_s: float = 20.0) -> pd.D
     out["explore_low_explore"] = out["test_total_explore_time"] < float(min_total_s)
     out["iz_low_explore"] = out["test_total_iz_time"] < float(min_total_s)
 
+        # FAM: total time with the familiar object (already aligned in processed table)
+    out["fam_total_explore_time"] = out["fam_familiar_explore_time"]
+    out["fam_total_iz_time"] = out["fam_familiar_iz_time"]
+
+    out["fam_explore_no_explore"] = out["fam_total_explore_time"] == 0
+    out["fam_iz_no_explore"] = out["fam_total_iz_time"] == 0
+
+    out["fam_explore_low_explore"] = out["fam_total_explore_time"] < float(min_total_s)
+    out["fam_iz_low_explore"] = out["fam_total_iz_time"] < float(min_total_s)
+
     return out
 
 
-def summarize_nor_sanity(df: pd.DataFrame, *, min_total_s: float = 20.0) -> str:
+def summarize_nor_sanity(df: pd.DataFrame, *, min_total_s: float = 20.0, max_ids: int = 12) -> str:
+    def _ids(mask: pd.Series) -> list[str]:
+        return df.loc[mask, "mouse_id"].astype(str).tolist()
+
+    def _fmt_ids(ids: list[str]) -> str:
+        if not ids:
+            return "[]"
+        head = ids[:max_ids]
+        suffix = "" if len(ids) <= max_ids else f" (+{len(ids) - max_ids} more)"
+        return f"{head}{suffix}"
+
     n = len(df)
     if n == 0:
         return "NOR sanity: no rows."
 
-    no_explore = int((df["test_total_explore_time"] == 0).sum())
-    low_explore = int((df["test_total_explore_time"] < float(min_total_s)).sum())
+    # TEST
+    test_total_explore = df["test_total_explore_time"]
+    test_total_iz = df["test_total_iz_time"]
 
-    no_iz = int((df["test_total_iz_time"] == 0).sum())
-    low_iz = int((df["test_total_iz_time"] < float(min_total_s)).sum())
+    test_no_explore_ids = _ids(test_total_explore == 0)
+    test_low_explore_ids = _ids(test_total_explore < float(min_total_s))
+
+    test_no_iz_ids = _ids(test_total_iz == 0)
+    test_low_iz_ids = _ids(test_total_iz < float(min_total_s))
+
+    # FAM
+    fam_total_explore = df["fam_total_explore_time"]
+    fam_total_iz = df["fam_total_iz_time"]
+
+    fam_no_explore_ids = _ids(fam_total_explore == 0)
+    fam_low_explore_ids = _ids(fam_total_explore < float(min_total_s))
+
+    fam_no_iz_ids = _ids(fam_total_iz == 0)
+    fam_low_iz_ids = _ids(fam_total_iz < float(min_total_s))
 
     return (
         "NOR sanity:\n"
-        f"- TEST exploration total == 0s: {no_explore}/{n}\n"
-        f"- TEST exploration total < {min_total_s:g}s: {low_explore}/{n}\n"
-        f"- TEST interaction-zone total == 0s: {no_iz}/{n}\n"
-        f"- TEST interaction-zone total < {min_total_s:g}s: {low_iz}/{n}"
+        f"- TEST exploration total == 0s: {len(test_no_explore_ids)}/{n} | ids={_fmt_ids(test_no_explore_ids)}\n"
+        f"- TEST exploration total < {min_total_s:g}s: {len(test_low_explore_ids)}/{n} | ids={_fmt_ids(test_low_explore_ids)}\n"
+        f"- TEST interaction-zone total == 0s: {len(test_no_iz_ids)}/{n} | ids={_fmt_ids(test_no_iz_ids)}\n"
+        f"- TEST interaction-zone total < {min_total_s:g}s: {len(test_low_iz_ids)}/{n} | ids={_fmt_ids(test_low_iz_ids)}\n"
+        "\n"
+        f"- FAM familiar exploration == 0s: {len(fam_no_explore_ids)}/{n} | ids={_fmt_ids(fam_no_explore_ids)}\n"
+        f"- FAM familiar exploration < {min_total_s:g}s: {len(fam_low_explore_ids)}/{n} | ids={_fmt_ids(fam_low_explore_ids)}\n"
+        f"- FAM familiar IZ == 0s: {len(fam_no_iz_ids)}/{n} | ids={_fmt_ids(fam_no_iz_ids)}\n"
+        f"- FAM familiar IZ < {min_total_s:g}s: {len(fam_low_iz_ids)}/{n} | ids={_fmt_ids(fam_low_iz_ids)}"
     )
+
 
 def derive_nor_metrics(
     fam: pd.DataFrame,
