@@ -1,0 +1,7 @@
+python scripts/run_assay.py --assay OFT --root ".\data\raw\oft"     
+python scripts/run_assay.py --assay VIT --root ".\data\raw\vit"    
+python scripts/run_assay.py --assay EPM --root ".\data\raw\epm"  
+python scripts/run_assay.py --assay NOR --root ".\data\raw\nor"         
+
+python scripts/run_stats.py --config configs/stats.yaml --assays nor
+

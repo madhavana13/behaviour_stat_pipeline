@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Dict, List, Tuple, Optional
 
 import pandas as pd
+from torch import diag
 import yaml
 
 
@@ -21,6 +22,29 @@ class StatsConfig:
     blocking_factors: List[str]
     cluster_col: str
     assays: List[str]
+    primary_one_sample_enabled: bool
+    primary_one_sample_group_col: str
+    primary_one_sample_collapse_over: list[str]
+    primary_one_sample_correction: str
+    primary_one_sample_run_ttest: bool
+    primary_one_sample_run_wilcoxon: bool
+    primary_one_sample_nulls: dict[str, dict[str, float]]
+    diagnostics_enabled: bool
+    diagnostics_groupings: list[list[str]]
+    diagnostics_endpoints: dict[str, list[str]]
+    diagnostics_min_n_test: int
+    diagnostics_var_ratio_thresh: float
+    diagnostics_mad_z_thresh: float
+    secondary_two_way_anova_enabled: bool
+    secondary_two_way_anova_factors: list[str]
+    secondary_two_way_anova_include_interaction: bool
+    secondary_two_way_anova_typ: int
+    secondary_two_way_anova_endpoints: dict[str, list[str]]
+    secondary_two_way_anova_correction: str
+    secondary_two_way_anova_posthoc: dict
+    secondary_two_way_anova_factor_orders: dict[str, list[str]]
+
+
 
 
 def load_stats_config(path: str | Path) -> StatsConfig:
@@ -29,13 +53,37 @@ def load_stats_config(path: str | Path) -> StatsConfig:
         cfg = yaml.safe_load(f)
 
     mouse_id_col = cfg["id_cols"]["mouse"]
-
     paths = cfg["paths"]
     processed_dir = Path(paths["processed_dir"])
     subjects_path = Path(paths["metadata_subjects"])
     out_tables = Path(paths["out_tables"])
     out_figures = Path(paths["out_figures"])
     out_logs = Path(paths["out_logs"])
+    diag = cfg.get("diagnostics", {})
+    diagnostics_enabled = bool(diag.get("enabled", False))
+    diagnostics_groupings = list(diag.get("groupings", []))
+    diagnostics_endpoints = dict(diag.get("endpoints", {}))
+    diagnostics_min_n_test = int(diag.get("min_n_test", 3))
+    diagnostics_var_ratio_thresh = float(diag.get("var_ratio_thresh", 4.0))
+    diagnostics_mad_z_thresh = float(diag.get("mad_z_thresh", 3.5))
+    pos = cfg.get("primary_one_sample", {})
+    primary_one_sample_enabled = bool(pos.get("enabled", False))
+    primary_one_sample_group_col = str(pos.get("group_col", "group"))
+    primary_one_sample_collapse_over = list(pos.get("collapse_over", []))
+    primary_one_sample_correction = str(pos.get("correction", "holm"))
+    primary_one_sample_run_ttest = bool(pos.get("run_ttest", True))
+    primary_one_sample_run_wilcoxon = bool(pos.get("run_wilcoxon", True))
+    primary_one_sample_nulls = dict(pos.get("nulls", {}))
+    sec = cfg.get("secondary_two_way_anova", {})
+    secondary_two_way_anova_enabled = bool(sec.get("enabled", False))
+    secondary_two_way_anova_factors = list(sec.get("factors", ["group", "sex"]))
+    secondary_two_way_anova_include_interaction = bool(sec.get("include_interaction", True))
+    secondary_two_way_anova_typ = int(sec.get("type", 3))
+    secondary_two_way_anova_endpoints = dict(sec.get("endpoints", {}))
+    secondary_two_way_anova_correction = str(sec.get("correction_across_endpoints", "none"))
+    secondary_two_way_anova_posthoc = dict(sec.get("posthoc", {}))
+    secondary_two_way_anova_factor_orders = dict(sec.get("factor_orders", {}))
+
 
     design = cfg["design"]
     between_factors = list(design.get("between_factors", []))
@@ -58,7 +106,28 @@ def load_stats_config(path: str | Path) -> StatsConfig:
         within_factors=within_factors,
         blocking_factors=blocking_factors,
         cluster_col=cluster_col,
-        assays=assays,
+        assays=assays, 
+        diagnostics_enabled=diagnostics_enabled,
+        diagnostics_groupings=diagnostics_groupings,
+        diagnostics_endpoints=diagnostics_endpoints,
+        diagnostics_min_n_test=diagnostics_min_n_test,
+        diagnostics_var_ratio_thresh=diagnostics_var_ratio_thresh,
+        diagnostics_mad_z_thresh=diagnostics_mad_z_thresh,
+        primary_one_sample_enabled=primary_one_sample_enabled,
+        primary_one_sample_group_col=primary_one_sample_group_col,
+        primary_one_sample_collapse_over=primary_one_sample_collapse_over,
+        primary_one_sample_correction=primary_one_sample_correction,
+        primary_one_sample_run_ttest=primary_one_sample_run_ttest,
+        primary_one_sample_run_wilcoxon=primary_one_sample_run_wilcoxon,
+        primary_one_sample_nulls=primary_one_sample_nulls,
+        secondary_two_way_anova_enabled=secondary_two_way_anova_enabled,
+        secondary_two_way_anova_factors=secondary_two_way_anova_factors,
+        secondary_two_way_anova_include_interaction=secondary_two_way_anova_include_interaction,
+        secondary_two_way_anova_typ=secondary_two_way_anova_typ,
+        secondary_two_way_anova_endpoints=secondary_two_way_anova_endpoints,
+        secondary_two_way_anova_correction=secondary_two_way_anova_correction,
+        secondary_two_way_anova_posthoc=secondary_two_way_anova_posthoc,
+        secondary_two_way_anova_factor_orders=secondary_two_way_anova_factor_orders
     )
 
 
@@ -136,7 +205,7 @@ def cell_counts(df: pd.DataFrame, factors: List[str]) -> pd.DataFrame:
         return pd.DataFrame({"n": [len(df)]})
     # counts per unique combination of factor levels
     out = (
-        df.groupby(factors, dropna=False)
+        df.groupby(factors, dropna=False, observed=False)
         .size()
         .reset_index(name="n")
         .sort_values(by=factors)

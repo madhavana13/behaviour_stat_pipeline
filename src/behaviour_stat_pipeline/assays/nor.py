@@ -16,7 +16,12 @@ Outputs (Option A):
 
 Assumptions:
 - FAM file contains flask_0, flask_1, lego_tower_0, lego_tower_1 columns. 
-- TEST file contains flask_0 and lego_tower_0 columns. 
+- TEST file contains flask_0 and lego_tower_0 columns.
+
+Note:
+- Processed output preserves ALL raw measures by prefixing:
+    - FAM columns become fam_<original>
+    - TEST columns become test_<original>
 """
 
 from __future__ import annotations
@@ -120,6 +125,7 @@ def _safe_pi(novel: pd.Series, familiar: pd.Series) -> pd.Series:
     denom = novel + familiar
     out = novel / denom.replace(0, np.nan)
     return out
+
 def add_nor_sanity_flags(df: pd.DataFrame, *, min_total_s: float = 20.0) -> pd.DataFrame:
     """
     Add non-destructive sanity flags for NOR.
@@ -139,7 +145,7 @@ def add_nor_sanity_flags(df: pd.DataFrame, *, min_total_s: float = 20.0) -> pd.D
     out["explore_low_explore"] = out["test_total_explore_time"] < float(min_total_s)
     out["iz_low_explore"] = out["test_total_iz_time"] < float(min_total_s)
 
-        # FAM: total time with the familiar object (already aligned in processed table)
+    # FAM: total time with the familiar object (already aligned in processed table)
     out["fam_total_explore_time"] = out["fam_familiar_explore_time"]
     out["fam_total_iz_time"] = out["fam_familiar_iz_time"]
 
@@ -200,6 +206,10 @@ def summarize_nor_sanity(df: pd.DataFrame, *, min_total_s: float = 20.0, max_ids
         f"- FAM familiar IZ < {min_total_s:g}s: {len(fam_low_iz_ids)}/{n} | ids={_fmt_ids(fam_low_iz_ids)}"
     )
 
+def _prefix_non_id_columns(df: pd.DataFrame, prefix: str, id_cols: list[str]) -> pd.DataFrame:
+    """Prefix all columns not in id_cols with `prefix`, to avoid collisions after merge."""
+    rename = {c: f"{prefix}{c}" for c in df.columns if c not in id_cols}
+    return df.rename(columns=rename)
 
 def derive_nor_metrics(
     fam: pd.DataFrame,
@@ -217,6 +227,7 @@ def derive_nor_metrics(
       - di_explore, pi_explore
       - di_iz,      pi_iz
       - familiar_type  ("flask" or "lego_tower")
+      Also preserves ALL raw measures by prefixing them (fam_/test_).
     """
     cfg = cfg or NORConfig()
     if cfg.presence_rule != "nonzero":
@@ -231,8 +242,27 @@ def derive_nor_metrics(
     fam = fam.rename(columns={"raw_id": "raw_id_fam", "source_file": "source_file_fam"})
     test = test.rename(columns={"raw_id": "raw_id_test", "source_file": "source_file_test"})
 
-    flask_any = (fam[FAM_EXPLORE_FLASK + FAM_IZ_FLASK] > 0).any(axis=1)
-    tower_any = (fam[FAM_EXPLORE_TOWER + FAM_IZ_TOWER] > 0).any(axis=1)
+    id_cols = ["mouse_id", "group", "sex", "timepoint"]
+
+    # Prefix all non-ID columns (including provenance + session) to keep everything and avoid collisions
+    fam = _prefix_non_id_columns(fam, "fam_", id_cols=id_cols)
+    test = _prefix_non_id_columns(test, "test_", id_cols=id_cols)
+
+    # Prefixed column groups (same semantics as before)
+    fam_explore_flask = [f"fam_{c}" for c in FAM_EXPLORE_FLASK]
+    fam_explore_tower = [f"fam_{c}" for c in FAM_EXPLORE_TOWER]
+    fam_iz_flask = [f"fam_{c}" for c in FAM_IZ_FLASK]
+    fam_iz_tower = [f"fam_{c}" for c in FAM_IZ_TOWER]
+
+    test_explore_flask = f"test_{TEST_EXPLORE_FLASK}"
+    test_explore_tower = f"test_{TEST_EXPLORE_TOWER}"
+    test_iz_flask = f"test_{TEST_IZ_FLASK}"
+    test_iz_tower = f"test_{TEST_IZ_TOWER}"
+
+    # Infer familiar object from FAM session (USE PREFIXED COLUMN NAMES)
+
+    flask_any = (fam[fam_explore_flask + fam_iz_flask] > 0).any(axis=1)
+    tower_any = (fam[fam_explore_tower + fam_iz_tower] > 0).any(axis=1)
 
     if (flask_any & tower_any).any():
         bad_ids = fam.loc[(flask_any & tower_any), "mouse_id"].astype(str).tolist()
@@ -248,57 +278,55 @@ def derive_nor_metrics(
             f"mouse_id examples: {bad_ids[:20]}"
         )
 
-    fam["familiar_type"] = np.where(flask_any, "flask", "lego_tower")
+    fam["fam_familiar_type"] = np.where(flask_any, "flask", "lego_tower")
 
     # Collapse FAM identical objects into a single familiar-time measure
     fam["fam_familiar_explore_time"] = np.where(
-        fam["familiar_type"] == "flask",
-        fam[FAM_EXPLORE_FLASK].sum(axis=1),
-        fam[FAM_EXPLORE_TOWER].sum(axis=1),
+        fam["fam_familiar_type"] == "flask",
+        fam[fam_explore_flask].sum(axis=1),
+        fam[fam_explore_tower].sum(axis=1),
     )
     fam["fam_familiar_iz_time"] = np.where(
-        fam["familiar_type"] == "flask",
-        fam[FAM_IZ_FLASK].sum(axis=1),
-        fam[FAM_IZ_TOWER].sum(axis=1),
+        fam["fam_familiar_type"] == "flask",
+        fam[fam_iz_flask].sum(axis=1),
+        fam[fam_iz_tower].sum(axis=1),
     )
 
-    # Merge fam + test (inner join keeps only mice with both sessions)
-    id_cols = ["mouse_id", "group", "sex", "timepoint"]
-    keep_fam = id_cols + ["raw_id_fam", "source_file_fam","familiar_type", "fam_familiar_explore_time", "fam_familiar_iz_time"]
-    keep_test = id_cols + ["raw_id_test", "source_file_test", TEST_EXPLORE_FLASK, TEST_EXPLORE_TOWER, TEST_IZ_FLASK, TEST_IZ_TOWER]
-
-    merged = fam[keep_fam].merge(
-        test[keep_test],
+    # Merge FULL tables (nothing dropped)
+    merged = fam.merge(
+        test,
         on=id_cols,
         how="inner",
         validate="one_to_one",
-        suffixes=("", "_test"),
     )
+
+    # Canonical downstream familiar_type
+    merged["familiar_type"] = merged["fam_familiar_type"]
 
     # Label TEST familiar vs novel based on familiar_type
     merged["test_familiar_explore_time"] = np.where(
         merged["familiar_type"] == "flask",
-        merged[TEST_EXPLORE_FLASK],
-        merged[TEST_EXPLORE_TOWER],
+        merged[test_explore_flask],
+        merged[test_explore_tower],
     )
     merged["test_novel_explore_time"] = np.where(
         merged["familiar_type"] == "flask",
-        merged[TEST_EXPLORE_TOWER],
-        merged[TEST_EXPLORE_FLASK],
+        merged[test_explore_tower],
+        merged[test_explore_flask],
     )
 
     merged["test_familiar_iz_time"] = np.where(
         merged["familiar_type"] == "flask",
-        merged[TEST_IZ_FLASK],
-        merged[TEST_IZ_TOWER],
+        merged[test_iz_flask],
+        merged[test_iz_tower],
     )
     merged["test_novel_iz_time"] = np.where(
         merged["familiar_type"] == "flask",
-        merged[TEST_IZ_TOWER],
-        merged[TEST_IZ_FLASK],
+        merged[test_iz_tower],
+        merged[test_iz_flask],
     )
 
-    # Indices (both definitions)
+    # Indices
     merged["di_explore"] = _safe_di(
         merged["test_novel_explore_time"],
         merged["test_familiar_explore_time"],
@@ -307,7 +335,6 @@ def derive_nor_metrics(
         merged["test_novel_explore_time"],
         merged["test_familiar_explore_time"],
     )
-
     merged["di_iz"] = _safe_di(
         merged["test_novel_iz_time"],
         merged["test_familiar_iz_time"],
@@ -319,6 +346,8 @@ def derive_nor_metrics(
 
     # Project invariant: processed must be unique at mouse_id × timepoint
     assert_unique_key(merged, ["mouse_id", "timepoint"], where="NOR processed")
+
+    # Sanity flags (non-destructive)
     merged = add_nor_sanity_flags(merged, min_total_s=20.0)
 
     return merged
@@ -330,4 +359,3 @@ PRIMARY_OUTCOMES: list[str] = [
     "di_iz",
     "pi_iz",
 ]
-
