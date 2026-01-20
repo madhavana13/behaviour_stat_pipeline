@@ -1,0 +1,29 @@
+id_cols:
+  mouse: mouse_id
+
+paths:
+  processed_dir: data/processed
+  metadata_subjects: data/metadata/subjects.csv
+  out_tables: outputs/tables
+  out_figures: outputs/figures
+  out_logs: outputs/logs
+
+design:
+  # These are COLUMN NAMES, not levels. Levels can be cup/tail OR stress/control etc.
+  between_factors: [group, sex]
+
+  within_factors:
+    vit: [timepoint, phase]
+    oft: []
+    epm: []
+    nor: []
+
+optional:
+  blocking_factors: []         # e.g., [cohort, batch] later
+  cluster_col: mouse_id        # repeated measures clustering key
+
+assays:
+  - vit
+  - nor
+  - oft
+  - epm
