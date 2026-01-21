@@ -246,6 +246,12 @@ def run_correlations(
 
     out = pd.DataFrame([r.__dict__ for r in results])
 
+    # --- multiplicity metadata (defensibility / reproducibility) ---
+    out["correction_method"] = correction
+    out["correction_scope"] = "within_spec"
+    out["m_tests"] = out.groupby(["assay", "spec_name"])["p_value"].transform("size").astype(int)
+
+
     # Apply correction within each (assay, spec_name) slice
     # (This matches "within spec" scope, which is usually what you want scientifically.)
     corr_method = (cfg.get("correlations", {}).get("correction", "fdr_bh") or "none").lower()
