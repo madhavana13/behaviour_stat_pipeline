@@ -9,12 +9,14 @@ from scipy import stats
 import statsmodels.api as sm
 from statsmodels.stats.multitest import multipletests
 from pathlib import Path
+import re
 
 
 @dataclass(frozen=True)
 class CorrelationResult:
     assay: str
     spec_name: str
+    analysis_type: str  # "corr" or "ols"
     method: str
     grouping: str
     group_key: str
@@ -28,6 +30,15 @@ class CorrelationResult:
     se_x: float
     t_x: float
     df_resid: float
+
+def _slug(s: str) -> str:
+    """
+    Create a filesystem- and CSV-safe identifier from a column name.
+    """
+    s = str(s).lower().strip()
+    s = re.sub(r"\s+", "_", s)          # spaces → underscores
+    s = re.sub(r"[^a-z0-9_]+", "", s)   # drop everything else
+    return s
 
 
 def _safe_query(df: pd.DataFrame, expr: Optional[str]) -> pd.DataFrame:
@@ -49,6 +60,37 @@ def _group_iterator(df: pd.DataFrame, group_cols: List[str]):
         key_str = ";".join([f"{c}={v}" for c, v in zip(group_cols, key)])
         yield (key_str, sub)
 
+def _resolve_corr_specs(cfg: dict, assay: str) -> list[dict]:
+    corr = cfg.get("correlations", {}) or {}
+    defaults = corr.get("defaults", {}) or {}
+    default_groupings = corr.get("default_groupings", [[]]) or [[]]
+
+    resolved = []
+    for i, s in enumerate(corr.get("specs", []) or []):
+        if not isinstance(s, dict):
+            raise TypeError(f"correlations.specs[{i}] must be a dict")
+
+        out = dict(defaults)  # start with global defaults
+        out.update(s)         # spec overrides defaults
+
+        out.setdefault("assay", assay.lower())
+        out.setdefault("method", "spearman")
+
+        if out.get("groupings", None) is None:
+            out["groupings"] = default_groupings
+
+        # auto-name
+        if not out.get("name"):
+            out["name"] = f"{assay.lower()}_{_slug(out['x'])}_vs_{_slug(out['y'])}"
+
+        # required keys after resolution
+        for k in ["name", "assay", "method", "x", "y", "groupings"]:
+            if k not in out:
+                raise ValueError(f"Resolved spec missing key '{k}'")
+
+        resolved.append(out)
+
+    return resolved
 
 def _corr_one(method: str, x: np.ndarray, y: np.ndarray) -> Tuple[float, float]:
     if method == "pearson":
@@ -137,7 +179,7 @@ def run_correlations(
     if not c.get("enabled", False):
         return pd.DataFrame()
 
-    specs = c.get("specs", [])
+    specs = _resolve_corr_specs(cfg, assay)
     if not isinstance(specs, list):
         raise ValueError("correlations.specs must be a list")
 
@@ -193,6 +235,7 @@ def run_correlations(
                     row = CorrelationResult(
                         assay=assay.upper(),
                         spec_name=name,
+                        analysis_type="corr",
                         method=method,
                         grouping=grouping_label,
                         group_key=group_key,
@@ -226,6 +269,7 @@ def run_correlations(
                     row = CorrelationResult(
                         assay=assay.upper(),
                         spec_name=name,
+                        analysis_type="ols",
                         method=f"ols[{se}]",
                         grouping=grouping_label,
                         group_key=group_key,
@@ -246,15 +290,19 @@ def run_correlations(
 
     out = pd.DataFrame([r.__dict__ for r in results])
 
-    # --- multiplicity metadata (defensibility / reproducibility) ---
-    out["correction_method"] = correction
-    out["correction_scope"] = "within_spec"
-    out["m_tests"] = out.groupby(["assay", "spec_name"])["p_value"].transform("size").astype(int)
-
-
     # Apply correction within each (assay, spec_name) slice
     # (This matches "within spec" scope, which is usually what you want scientifically.)
     corr_method = (cfg.get("correlations", {}).get("correction", "fdr_bh") or "none").lower()
+
+    # --- multiplicity metadata (defensibility / reproducibility) ---
+    out["correction_method"] = corr_method
+    out["correction_scope"] = "within_spec"
+    out["m_tests"] = (
+        out.groupby(["assay", "spec_name"])["p_value"]
+           .transform("size")
+           .astype(int)
+    )
+
     out["p_adj"] = np.nan
     for (a, s), sub_idx in out.groupby(["assay", "spec_name"]).groups.items():
         pvals = out.loc[sub_idx, "p_value"].astype(float).tolist()
@@ -264,3 +312,4 @@ def run_correlations(
     Path(out_csv_path).parent.mkdir(parents=True, exist_ok=True)
     out.to_csv(out_csv_path, index=False)
     return out
+
