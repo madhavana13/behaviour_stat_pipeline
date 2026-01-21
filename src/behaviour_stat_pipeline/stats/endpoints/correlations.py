@@ -172,9 +172,6 @@ def run_correlations(
 
         d0 = _safe_query(df, filt)
 
-        # collect p-values for correction within spec (across all groupings/groups)
-        spec_rows: List[Tuple[int, float]] = []  # (index in results list, p)
-
         for grouping_cols in groupings:
             grouping_cols = list(grouping_cols or [])
             grouping_label = "+".join(grouping_cols) if grouping_cols else "pooled"
@@ -210,7 +207,6 @@ def run_correlations(
                         df_resid=float("nan"),
                     )
                     results.append(row)
-                    spec_rows.append((len(results) - 1, float(p)))
 
                 elif method == "ols":
                     # OLS uses covariates; effective N is after dropping missing in y, x, and covariates
@@ -244,18 +240,6 @@ def run_correlations(
                         df_resid=df_resid,
                     )
                     results.append(row)
-                    spec_rows.append((len(results) - 1, float(p_x)))
-
-        # apply correction within this spec (only to rows produced by this spec)
-        if spec_rows:
-            idxs, pvals = zip(*spec_rows)
-            p_adj = _adjust_pvalues(list(pvals), correction)
-            # store adjusted pvals by modifying results list (convert later to df)
-            # We'll attach after conversion by building a parallel column.
-            for (i, _), pa in zip(spec_rows, p_adj):
-                # hack: stash adjusted p in statistic sign bit? no.
-                # Instead we'll handle via dataframe after list->df; store in dict for now.
-                pass
 
     if not results:
         return pd.DataFrame()
