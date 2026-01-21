@@ -21,7 +21,7 @@ design:
   between_factors: [group, sex]
 
   within_factors:
-    vit: [timepoint, phase]
+    vit: []
     oft: []
     epm: []
     nor: []
@@ -82,7 +82,11 @@ diagnostics:
       - time in corners
 
     epm: []
-    vit: []
+    vit:
+      - "did__time in homecage"
+      - "did__total distance moved"
+      - "did__average speed"
+      - "delta_after_minus_before__hand__total distance moved"
 
 secondary_two_way_anova:
   enabled: true
@@ -110,7 +114,11 @@ secondary_two_way_anova:
       - distance moved in center
       - time in corners
     epm: []
-    vit: []
+    vit: 
+      - "did__time in homecage"
+      - "did__total distance moved"
+      - "did__average speed"
+      - "delta_after_minus_before__hand__total distance moved"
 
   posthoc:
     enabled: true
@@ -167,6 +175,10 @@ correlations:
     - assay: oft
       x: "total distance moved"
       y: "time in center"
+
+    - assay: vit
+      x: "did__total distance moved"
+      y: "delta_after_minus_before__hand__total distance moved"
 
       method: pearson        # optional override
       groupings:
