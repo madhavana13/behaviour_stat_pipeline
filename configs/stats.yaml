@@ -139,7 +139,7 @@ correlations:
     - []
     - [group]
     - [group, sex]
-
+  
   # multiple-comparison correction across all tests produced by each spec
   correction: fdr_bh         # holm | bonferroni | sidak | fdr_bh | fdr_by | none
 
@@ -219,3 +219,9 @@ figures:
         x_col: "measure"
         mapping:
           Total: "test_total distance moved"
+
+  auto_from_correlations:
+    enabled: true
+    # Create one pooled scatter per correlations.specs entry (Friday-safe)
+    fit_enabled: true
+    exclude: []  # optional list of correlation spec names to skip
