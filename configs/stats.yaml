@@ -124,7 +124,16 @@ secondary_two_way_anova:
 correlations:
   enabled: true
 
-  # how to split the data for separate correlations (each entry is a list of columns)
+  # global defaults applied to every spec unless overridden
+  defaults:
+    method: spearman
+    groupings: null          # null → use default_groupings
+    filter: null
+    covariates: []
+    se: robust_hc3
+    cluster_col: mouse_id
+
+  # how to split the data for separate correlations
   # [] means pooled across all animals
   default_groupings:
     - []
@@ -132,30 +141,20 @@ correlations:
     - [group, sex]
 
   # multiple-comparison correction across all tests produced by each spec
-  correction: fdr_bh   # options: holm, bonferroni, sidak, fdr_bh, fdr_by, none
+  correction: fdr_bh         # holm | bonferroni | sidak | fdr_bh | fdr_by | none
 
   min_n: 6
 
+  # minimal per-spec definitions
   specs:
-    - name: nor_object_explore_vs_distance
-      assay: nor
-      method: spearman     # pearson | spearman | ols
-      x: "test_total distance moved"
+    - x: "test_total distance moved"
       y: "test_novel_explore_time"
-      groupings: null      # null => use default_groupings
-      filter: null         # optional pandas query string, e.g. "sex == 'female'"
-      covariates: []       # only used for method: ols
-      se: robust_hc3       # only used for method: ols (robust_hc3 | robust_hc1 | cluster)
-      cluster_col: mouse_id  # only for se: cluster
 
-    - name: nor_di_vs_total_explore
-      assay: nor
-      method: pearson
-      x: "di_explore"
+    - x: "di_explore"
       y: "test_total_explore_time"
+      method: pearson        # optional override
       groupings:
-        - []
-      filter: null
+        - []                 # optional override (pooled only)
 
 
 figures:
