@@ -180,8 +180,8 @@ figures:
       male: "^"
 
     # layout + geometry (these are the ones your runner actually reads)
-    group_gap: 0.3
-    box_width: 0.45
+    group_gap: 0.2
+    box_width: 0.25
     sex_dodge: 0.06
 
     # point styling
