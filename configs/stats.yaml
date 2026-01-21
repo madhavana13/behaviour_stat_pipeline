@@ -120,36 +120,85 @@ secondary_two_way_anova:
       - name: group_within_sex_1
         a: {group: 0, sex: 1}
         b: {group: 1, sex: 1}
+correlations:
+  enabled: true
+
+  # how to split the data for separate correlations (each entry is a list of columns)
+  # [] means pooled across all animals
+  default_groupings:
+    - []
+    - [group]
+    - [group, sex]
+
+  # multiple-comparison correction across all tests produced by each spec
+  correction: fdr_bh   # options: holm, bonferroni, sidak, fdr_bh, fdr_by, none
+
+  min_n: 6
+
+  specs:
+    - name: nor_object_explore_vs_distance
+      assay: nor
+      method: spearman     # pearson | spearman | ols
+      x: test_total_distance_moved
+      y: test_novel_explore_time
+      groupings: null      # null => use default_groupings
+      filter: null         # optional pandas query string, e.g. "sex == 'female'"
+      covariates: []       # only used for method: ols
+      se: robust_hc3       # only used for method: ols (robust_hc3 | robust_hc1 | cluster)
+      cluster_col: mouse_id  # only for se: cluster
+
+    - name: nor_di_vs_total_explore
+      assay: nor
+      method: pearson
+      x: di_explore
+      y: test_total_explore_time
+      groupings:
+        - []
+      filter: null
 
 
 figures:
   enabled: true
+
+  # auto-generate one simple "Total" plot per endpoint listed in stats.yaml
+  # (single-column endpoints only; multi-column plots stay manual specs)
+  auto_from_endpoints:
+    enabled: true
+    source: "secondary_two_way_anova"
+    exclude:
+      - "test_total distance moved"   # already manually specified below
+      - "test_familiar_iz_time"       # already shown in nor_test_object_times
+      - "test_novel_iz_time"          # already shown in nor_test_object_times
+
   defaults:
-    jitter_sd: 0.18
-    point_size: 28
-    point_alpha: 0.9
-    y_lim: null
+    # aesthetics
     group_edgecolors:
       tail: "black"
       cup: "orange"
     sex_markers:
       female: "o"
       male: "^"
-    formats: ["png"] #can add other file formats later, e.g., ["svg", "pdf"]
-  PlotStyle:
-    group_gap: float = 0.3      # was 1.0
-    box_width: float = 0.45     # was 0.6
-    sex_dodge: float = 0.06  
+
+    # layout + geometry (these are the ones your runner actually reads)
+    group_gap: 0.3
+    box_width: 0.45
+    sex_dodge: 0.06
+
+    # point styling
+    jitter_sd: 0.18
+    point_size: 28
+    point_alpha: 0.9
+
+    # output formats
+    formats: ["png"]
 
   specs:
     - name: "nor_test_object_times"
       assay: "nor"
       type: "boxpoints"
       value_label: "Time with objects (s)"
-      x_label: "Object"
       x_order: ["Familiar", "Novel"]
-      group_order: ["tail", "cup"]   # optional but recommended for consistent block order
-      # wide-to-long mapping (two boxes per group)
+      group_order: ["tail", "cup"]
       wide_to_long:
         x_col: "object"
         mapping:
@@ -160,8 +209,8 @@ figures:
       assay: "nor"
       type: "boxpoints"
       value_label: "Distance moved (cm)"
-      x_label: "Measure"
       x_order: ["Total"]
+      group_order: ["tail", "cup"]
       wide_to_long:
         x_col: "measure"
         mapping:
