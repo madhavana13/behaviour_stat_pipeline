@@ -12,3 +12,5 @@ __pycache__/
 .venv/
 # Generated outputs
 data/processed/
+data/interim/
+
