@@ -25,6 +25,8 @@ from behaviour_stat_pipeline.stats.endpoints.one_sample import run_one_sample_by
 from behaviour_stat_pipeline.stats.endpoints.two_way_anova import run_two_way_anova
 from behaviour_stat_pipeline.stats.endpoints.simple_effects import run_simple_effects, SimpleEffectsSpec
 from behaviour_stat_pipeline.stats.corrections import adjust_pvalues
+from behaviour_stat_pipeline.stats.endpoints.correlations import run_correlations
+
 
 
 
@@ -167,6 +169,18 @@ def main() -> None:
             correction=str(posthoc_config.get("correction", "sidak")),
             )
             posthoc_df.to_csv(cfg.out_tables / f"{assay.upper()}_secondary_posthoc_cellmeans.csv", index=False)
+      
+        # --- correlations / regression (config-driven) ---
+        # Use the validated StatsConfig for gating (no dict-style .get on dataclass).
+        if getattr(cfg, "correlations_enabled", False):
+            out_csv = str(Path(paths["out_tables"]) / f"{assay.upper()}_correlations.csv")
+            run_correlations(
+                assay=assay,
+                df=df_processed,
+                cfg=cfg_raw_dict,   # pass the YAML dict (legacy path for correlations module)
+                out_csv_path=out_csv,
+            )
+
 
         # Drop single-level factors (subset robustness)
         kept_between, dropped_between = drop_single_level_factors(merged, between)

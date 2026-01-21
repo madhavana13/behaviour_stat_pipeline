@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 from pathlib import Path
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple, Optional, Any
 
 import pandas as pd
-from torch import diag
 import yaml
 
 
@@ -43,9 +42,21 @@ class StatsConfig:
     secondary_two_way_anova_correction: str
     secondary_two_way_anova_posthoc: dict
     secondary_two_way_anova_factor_orders: dict[str, list[str]]
+    correlations_enabled: bool
+    correlations_correction: str
+    correlations_min_n: int
+    correlations_specs: dict
 
 
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Canonical conversion for legacy code paths that still expect a dict config.
 
+        IMPORTANT:
+        - New code should prefer typed attribute access.
+        - This method exists only to support transitional callers (e.g. scripts).
+        """
+        return asdict(self)
 
 def load_stats_config(path: str | Path) -> StatsConfig:
     path = Path(path)
@@ -82,8 +93,7 @@ def load_stats_config(path: str | Path) -> StatsConfig:
     secondary_two_way_anova_endpoints = dict(sec.get("endpoints", {}))
     secondary_two_way_anova_correction = str(sec.get("correction_across_endpoints", "none"))
     secondary_two_way_anova_posthoc = dict(sec.get("posthoc", {}))
-    secondary_two_way_anova_factor_orders = dict(sec.get("factor_orders", {}))
-
+    secondary_two_way_anova_factor_orders = dict(sec.get("factor_orders", {}))    
 
     design = cfg["design"]
     between_factors = list(design.get("between_factors", []))
@@ -94,6 +104,11 @@ def load_stats_config(path: str | Path) -> StatsConfig:
     cluster_col = optional.get("cluster_col", mouse_id_col)
 
     assays = list(cfg.get("assays", []))
+    corr = cfg.get("correlations", {})
+    correlations_enabled = bool(corr.get("enabled", False))
+    correlations_correction = str(corr.get("correction", "fdr_bh"))
+    correlations_min_n = int(corr.get("min_n", 5))
+    correlations_specs = dict(corr.get("specs", {}))
 
     return StatsConfig(
         mouse_id_col=mouse_id_col,
@@ -127,7 +142,11 @@ def load_stats_config(path: str | Path) -> StatsConfig:
         secondary_two_way_anova_endpoints=secondary_two_way_anova_endpoints,
         secondary_two_way_anova_correction=secondary_two_way_anova_correction,
         secondary_two_way_anova_posthoc=secondary_two_way_anova_posthoc,
-        secondary_two_way_anova_factor_orders=secondary_two_way_anova_factor_orders
+        secondary_two_way_anova_factor_orders=secondary_two_way_anova_factor_orders,
+        correlations_enabled=correlations_enabled,
+        correlations_correction=correlations_correction,
+        correlations_min_n=correlations_min_n,
+        correlations_specs=correlations_specs
     )
 
 
