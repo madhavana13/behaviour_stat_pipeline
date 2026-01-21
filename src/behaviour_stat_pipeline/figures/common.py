@@ -6,18 +6,30 @@ from typing import Dict, List, Optional
 import numpy as np
 
 
+from dataclasses import dataclass
+from typing import Dict
+
 @dataclass(frozen=True)
 class PlotStyle:
+    # aesthetics driven by config
     group_edgecolors: Dict[str, str]  # e.g. {"tail": "black", "cup": "orange"}
     sex_markers: Dict[str, str]       # e.g. {"female": "o", "male": "^"}
+
+    # box aesthetics
     box_linewidth: float = 2.0
     median_linewidth: float = 2.0
     whisker_linewidth: float = 2.0
     cap_linewidth: float = 2.0
-    point_size: float = 24.0
+    box_width: float = 0.45
+
+    # point aesthetics
+    point_size: float = 28.0
     point_alpha: float = 0.9
-    jitter_sd: float = 0.06  # jitter in x units
-    seed: int = 1337
+    jitter_sd: float = 0.18
+    sex_dodge: float = 0.06
+
+    # layout
+    group_gap: float = 0.6
 
 import hashlib
 import numpy as np
