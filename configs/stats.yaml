@@ -127,7 +127,6 @@ figures:
     point_size: 28
     point_alpha: 0.9
     y_lim: null
-
     group_edgecolors:
       tail: "black"
       cup: "orange"
@@ -135,6 +134,10 @@ figures:
       female: "o"
       male: "^"
     formats: ["png"] #can add other file formats later, e.g., ["svg", "pdf"]
+  PlotStyle:
+    group_gap: float = 0.3      # was 1.0
+    box_width: float = 0.45     # was 0.6
+    sex_dodge: float = 0.06  
 
   specs:
     - name: "nor_test_object_times"

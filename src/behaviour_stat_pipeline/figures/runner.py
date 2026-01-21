@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 import pandas as pd
 
-from .common import PlotStyle, require_columns, infer_order
+from .common import PlotStyle, require_columns
 from .boxpoints import plot_group_boxpoints
 
 
@@ -33,8 +32,7 @@ def _make_long_from_mapping(
         tmp[x_col] = str(label)
         pieces.append(tmp)
 
-    out = pd.concat(pieces, axis=0, ignore_index=True)
-    return out
+    return pd.concat(pieces, axis=0, ignore_index=True)
 
 
 def run_figures_from_config(
@@ -56,13 +54,25 @@ def run_figures_from_config(
         return []
 
     defaults = fig_cfg.get("defaults", {})
-    style = PlotStyle(
-        group_edgecolors=defaults.get("group_edgecolors", {"tail": "black", "cup": "orange"}),
-        sex_markers=defaults.get("sex_markers", {"female": "o", "male": "^"}),
-    )
-    formats = defaults.get("formats", ["png", "pdf"])
 
-    written: List[Path] = []
+    style = PlotStyle(
+        group_edgecolors=defaults.get("group_edgecolors", {}),
+        sex_markers=defaults.get("sex_markers", {}),
+        group_gap=float(defaults.get("group_gap", 0.6)),
+        box_width=float(defaults.get("box_width", 0.45)),
+        sex_dodge=float(defaults.get("sex_dodge", 0.06)),
+        jitter_sd=float(defaults.get("jitter_sd", 0.18)),
+        point_size=float(defaults.get("point_size", 28.0)),
+        point_alpha=float(defaults.get("point_alpha", 0.9)),
+    )
+
+    formats = defaults.get("formats", ["png"])
+    if not isinstance(formats, list) or not formats:
+        raise ValueError("figures.defaults.formats must be a non-empty list, e.g. ['png'].")
+
+    for fmt in formats:
+        if fmt not in ("png", "pdf"):
+            raise ValueError(f"Unsupported format: {fmt}")
 
     # load processed data
     processed_path = processed_dir / f"{assay.upper()}_processed.csv"
@@ -70,8 +80,9 @@ def run_figures_from_config(
         raise FileNotFoundError(f"Processed file not found: {processed_path}")
 
     df = pd.read_csv(processed_path)
-
     require_columns(df, [mouse_id_col, group_col, sex_col])
+
+    written: List[Path] = []
 
     specs = fig_cfg.get("specs", [])
     for spec in specs:
@@ -82,6 +93,7 @@ def run_figures_from_config(
 
         name = str(spec.get("name", f"{assay}_figure"))
         value_label = spec.get("value_label", None)
+
         x_order = spec.get("x_order", None)
         group_order = spec.get("group_order", None)
         sex_order = spec.get("sex_order", ["female", "male"])
@@ -89,6 +101,7 @@ def run_figures_from_config(
         w2l = spec.get("wide_to_long", None)
         if not w2l:
             raise ValueError(f"Figure spec '{name}' missing wide_to_long.")
+
         x_col = str(w2l.get("x_col", "x"))
         mapping = w2l.get("mapping", {})
         if not isinstance(mapping, dict) or not mapping:
@@ -98,18 +111,27 @@ def run_figures_from_config(
         id_cols = [mouse_id_col, group_col, sex_col]
         long_df = _make_long_from_mapping(df, x_col=x_col, mapping=mapping, id_cols=id_cols)
 
-        # Output filenames
-        # one figure per spec (contains all x levels in that mapping)
+        # Output paths
         stem = f"{assay.upper()}_{name}"
-        for fmt in formats:
-            if fmt not in ("png", "pdf"):
-                raise ValueError(f"Unsupported format: {fmt}")
+        out_paths = [out_figures / f"{stem}.{fmt}" for fmt in formats]
 
-        out_png = out_figures / f"{stem}.png"
-        out_pdf = out_figures / f"{stem}.pdf"
-
+        style_spec = PlotStyle(
+            group_edgecolors=style.group_edgecolors,
+            sex_markers=style.sex_markers,
+            box_linewidth=style.box_linewidth,
+            median_linewidth=style.median_linewidth,
+            whisker_linewidth=style.whisker_linewidth,
+            cap_linewidth=style.cap_linewidth,
+            box_width=float(spec.get("box_width", style.box_width)),
+            point_size=float(spec.get("point_size", style.point_size)),
+            point_alpha=float(spec.get("point_alpha", style.point_alpha)),
+            jitter_sd=float(spec.get("jitter_sd", style.jitter_sd)),
+            sex_dodge=float(spec.get("sex_dodge", style.sex_dodge)),
+            group_gap=float(spec.get("group_gap", style.group_gap)),
+        )
+        style = style_spec
         plot_group_boxpoints(
-            long_df,
+            df=long_df,
             value_col="value",
             x_col=x_col,
             group_col=group_col,
@@ -117,8 +139,7 @@ def run_figures_from_config(
             mouse_id_col=mouse_id_col,
             assay=assay.upper(),
             endpoint=name,
-            out_png=out_png,
-            out_pdf=out_pdf,
+            out_paths=out_paths,
             x_order=x_order,
             group_order=group_order,
             sex_order=sex_order,
@@ -128,6 +149,6 @@ def run_figures_from_config(
             show=False,
         )
 
-        written.extend([out_png])
+        written.extend(out_paths)
 
     return written
