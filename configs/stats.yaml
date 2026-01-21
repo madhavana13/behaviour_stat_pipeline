@@ -120,6 +120,8 @@ secondary_two_way_anova:
       - name: group_within_sex_1
         a: {group: 0, sex: 1}
         b: {group: 1, sex: 1}
+
+
 figures:
   enabled: true
   defaults:
