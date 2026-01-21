@@ -172,6 +172,7 @@ figures:
 
   defaults:
     # aesthetics
+  
     group_edgecolors:
       tail: "black"
       cup: "orange"
@@ -180,13 +181,16 @@ figures:
       male: "^"
 
     # layout + geometry (these are the ones your runner actually reads)
-    group_gap: 0.2
-    box_width: 0.25
+    group_gap: 0.15
+    box_width: 0.30
     sex_dodge: 0.06
+    figure_size: [6.0, 4.8]   # inches
+    dpi: 300
+    group_order: ["tail", "cup"]
 
     # point styling
     jitter_sd: 0.18
-    point_size: 28
+    point_size: 22
     point_alpha: 0.9
 
     # output formats
