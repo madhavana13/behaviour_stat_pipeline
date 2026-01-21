@@ -120,3 +120,44 @@ secondary_two_way_anova:
       - name: group_within_sex_1
         a: {group: 0, sex: 1}
         b: {group: 1, sex: 1}
+figures:
+  enabled: true
+  defaults:
+    jitter_sd: 0.18
+    point_size: 28
+    point_alpha: 0.9
+    y_lim: null
+
+    group_edgecolors:
+      tail: "black"
+      cup: "orange"
+    sex_markers:
+      female: "o"
+      male: "^"
+    formats: ["png"] #can add other file formats later, e.g., ["svg", "pdf"]
+
+  specs:
+    - name: "nor_test_object_times"
+      assay: "nor"
+      type: "boxpoints"
+      value_label: "Time with objects (s)"
+      x_label: "Object"
+      x_order: ["Familiar", "Novel"]
+      group_order: ["tail", "cup"]   # optional but recommended for consistent block order
+      # wide-to-long mapping (two boxes per group)
+      wide_to_long:
+        x_col: "object"
+        mapping:
+          Familiar: "test_familiar_iz_time"
+          Novel: "test_novel_iz_time"
+
+    - name: "test_total distance moved"
+      assay: "nor"
+      type: "boxpoints"
+      value_label: "Distance moved (cm)"
+      x_label: "Measure"
+      x_order: ["Total"]
+      wide_to_long:
+        x_col: "measure"
+        mapping:
+          Total: "test_total distance moved"
