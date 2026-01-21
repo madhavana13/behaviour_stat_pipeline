@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 import textwrap
-
+import yaml
 import pandas as pd
 import numpy as np
 import scipy.stats as st
@@ -24,6 +24,7 @@ from behaviour_stat_pipeline.stats.diagnostics import endpoint_diagnostics
 from behaviour_stat_pipeline.stats.endpoints.one_sample import run_one_sample_by_group
 from behaviour_stat_pipeline.stats.endpoints.two_way_anova import run_two_way_anova
 from behaviour_stat_pipeline.stats.endpoints.simple_effects import run_simple_effects, SimpleEffectsSpec
+from behaviour_stat_pipeline.stats.common import load_stats_config
 from behaviour_stat_pipeline.stats.corrections import adjust_pvalues
 from behaviour_stat_pipeline.stats.endpoints.correlations import run_correlations
 
@@ -103,6 +104,13 @@ def main() -> None:
                     )
                 out = pd.concat(frames, ignore_index=True)
                 out.to_csv(cfg.out_tables / f"{assay.upper()}_primary_one_sample.csv", index=False)
+        
+        # --- Secondary/exploratory: correlations / regression (config-driven) ---
+        # Use the validated StatsConfig for gating (no dict-style .get on dataclass).
+        cfg = load_stats_config(args.config)
+
+        with Path(args.config).open("r", encoding="utf-8") as f:
+            cfg_raw = yaml.safe_load(f)
 
         # --- Diagnostics (config-driven; no copy-paste per assay) ---
         if getattr(cfg, "diagnostics_enabled", False):
@@ -171,16 +179,21 @@ def main() -> None:
             posthoc_df.to_csv(cfg.out_tables / f"{assay.upper()}_secondary_posthoc_cellmeans.csv", index=False)
       
         # --- correlations / regression (config-driven) ---
-        # Use the validated StatsConfig for gating (no dict-style .get on dataclass).
-        if getattr(cfg, "correlations_enabled", False):
-            out_csv = str(Path(paths["out_tables"]) / f"{assay.upper()}_correlations.csv")
+        if cfg.correlations_enabled:
+            out_csv = str(cfg.out_tables / f"{assay.upper()}_correlations.csv")
+
+            # ensure processed df exists in this scope (use the one you already use for ANOVA etc.)
+            # df_processed should already exist; if not, read it here deterministically:
+            df_processed = read_processed(cfg.processed_dir, assay)
+
             run_correlations(
                 assay=assay,
                 df=df_processed,
-                cfg=cfg_raw_dict,   # pass the YAML dict (legacy path for correlations module)
+                cfg=cfg_raw,          # IMPORTANT: raw YAML dict, not cfg.to_dict()
                 out_csv_path=out_csv,
             )
 
+            print(f"[{assay.upper()}] Wrote correlations: {out_csv}")
 
         # Drop single-level factors (subset robustness)
         kept_between, dropped_between = drop_single_level_factors(merged, between)

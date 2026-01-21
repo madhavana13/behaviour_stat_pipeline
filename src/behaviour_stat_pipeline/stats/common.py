@@ -45,7 +45,7 @@ class StatsConfig:
     correlations_enabled: bool
     correlations_correction: str
     correlations_min_n: int
-    correlations_specs: dict
+    correlations_specs: list[dict]
 
 
     def to_dict(self) -> Dict[str, Any]:
@@ -108,7 +108,17 @@ def load_stats_config(path: str | Path) -> StatsConfig:
     correlations_enabled = bool(corr.get("enabled", False))
     correlations_correction = str(corr.get("correction", "fdr_bh"))
     correlations_min_n = int(corr.get("min_n", 5))
-    correlations_specs = dict(corr.get("specs", {}))
+    correlations_specs_raw = corr.get("specs", []) or []
+    if not isinstance(correlations_specs_raw, list):
+        raise TypeError("correlations.specs must be a list of spec dicts")
+
+    # shallow validation: each entry must be a dict
+    for i, s in enumerate(correlations_specs_raw):
+        if not isinstance(s, dict):
+            raise TypeError(f"correlations.specs[{i}] must be a dict")
+
+    correlations_specs = correlations_specs_raw
+
 
     return StatsConfig(
         mouse_id_col=mouse_id_col,
