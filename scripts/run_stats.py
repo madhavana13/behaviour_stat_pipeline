@@ -268,6 +268,7 @@ def main() -> None:
                     cell_a = _decode_cell(pair["a"])
                     cell_b = _decode_cell(pair["b"])
 
+
                     # subset rows for each cell
                     mask_a = np.ones(len(d), dtype=bool)
                     mask_b = np.ones(len(d), dtype=bool)
@@ -285,6 +286,27 @@ def main() -> None:
                     mean_b = float(yb.mean()) if n_b > 0 else np.nan
                     diff = mean_a - mean_b if (n_a > 0 and n_b > 0) else np.nan
 
+                    # --- Prism-style presentation (cosmetic only; does NOT affect p-values) ---
+                    def _level_idx(factor: str, level: str) -> int:
+                        return levels_by_factor[factor].index(str(level))
+
+                    score_a = sum(_level_idx(f, cell_a[f]) for f in factors)
+                    score_b = sum(_level_idx(f, cell_b[f]) for f in factors)
+
+                    if score_a >= score_b:
+                        cell_1, cell_2 = cell_a, cell_b
+                        mean_1, mean_2 = mean_a, mean_b
+                    else:
+                        cell_1, cell_2 = cell_b, cell_a
+                        mean_1, mean_2 = mean_b, mean_a
+
+                    diff_prism = (mean_1 - mean_2) if (np.isfinite(mean_1) and np.isfinite(mean_2)) else np.nan
+
+                    def _pretty(cell: dict[str, str]) -> str:
+                        return ":".join(str(cell[f]).capitalize() for f in factors)
+
+                    contrast_label = f"{_pretty(cell_1)} vs {_pretty(cell_2)}"
+
                     # Prism pooled SE uses ANOVA MSE (not cell variances)
                     se = float(np.sqrt(mse * (1.0 / n_a + 1.0 / n_b))) if (n_a > 0 and n_b > 0) else np.nan
                     t_stat = float(diff / se) if (se is not None and np.isfinite(se) and se > 0) else np.nan
@@ -297,6 +319,8 @@ def main() -> None:
                         "assay": assay.upper(),
                         "endpoint": endpoint,
                         "pair_name": pair_name,
+                        "contrast_label": contrast_label,
+                        "diff_prism_direction": diff_prism,
                         "cell_a": ";".join([f"{k}={cell_a[k]}" for k in factors]),
                         "cell_b": ";".join([f"{k}={cell_b[k]}" for k in factors]),
                         "mean_a": mean_a,
