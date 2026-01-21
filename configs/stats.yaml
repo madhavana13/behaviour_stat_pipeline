@@ -75,7 +75,12 @@ diagnostics:
       - di_iz
       - fam_total distance moved
       - test_total distance moved
-    oft: []
+    oft: 
+      - total distance moved
+      - time in center
+      - distance moved in center
+      - time in corners
+
     epm: []
     vit: []
 
@@ -99,7 +104,11 @@ secondary_two_way_anova:
       - di_iz
       - fam_total distance moved
       - test_total distance moved
-    oft: []
+    oft:
+      - total distance moved
+      - time in center
+      - distance moved in center
+      - time in corners
     epm: []
     vit: []
 
@@ -147,11 +156,18 @@ correlations:
 
   # minimal per-spec definitions
   specs:
-    - x: "test_total distance moved"
+    - assay: nor
+      x: "test_total distance moved"
       y: "test_novel_explore_time"
 
-    - x: "di_explore"
+    - assay: nor
+      x: "di_explore"
       y: "test_total_explore_time"
+
+    - assay: oft
+      x: "total distance moved"
+      y: "time in center"
+
       method: pearson        # optional override
       groupings:
         - []                 # optional override (pooled only)
