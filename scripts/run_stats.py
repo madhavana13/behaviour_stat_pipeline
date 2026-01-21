@@ -153,6 +153,21 @@ def main() -> None:
                 aov_all.to_csv(cfg.out_tables / f"{assay.upper()}_secondary_two_way_anova.csv", index=False)
 
         # --- Post hoc: Prism-exact selected cell-mean comparisons (pooled MSE + Sidak) ---
+
+        def significance_label(p):
+            if not np.isfinite(p):
+                return ""
+            if p < 1e-4:
+                return "≤0.0001"
+            elif p < 1e-3:
+                return "≤0.001"
+            elif p < 1e-2:
+                return "≤0.01"
+            elif p < 5e-2:
+                return "≤0.05"
+            else:
+                return "ns"
+
         posthoc = getattr(cfg, "secondary_two_way_anova_posthoc", None)
         if posthoc and posthoc.get("enabled", False):
 
@@ -315,6 +330,8 @@ def main() -> None:
                     # Sidak adjustment across the K selected comparisons (per endpoint)
                     p_sidak = float(1 - (1 - p) ** K) if (p is not None and np.isfinite(p)) else np.nan
 
+                    sig_label = significance_label(p_sidak)
+
                     posthoc_rows.append({
                         "assay": assay.upper(),
                         "endpoint": endpoint,
@@ -334,6 +351,8 @@ def main() -> None:
                         "df_error": df_error,
                         "p_value": p,
                         "p_value_sidak": p_sidak,
+                        "significance_label": sig_label
+
                     })
 
             posthoc_df = pd.DataFrame(posthoc_rows)
