@@ -14,15 +14,18 @@ _MOUSE_ID_PATTERNS = [
     re.compile(r"(?P<cage>\d+[A-Z]?)_ID(?P<num>\d+)\b", re.IGNORECASE),
 ]
 
-
 def extract_mouse_id(raw: str) -> str:
-    s = str(raw)
+    s = str(raw).strip()
+
+    # NEW: accept already-normalized internal IDs like "ID10"
+    if re.fullmatch(r"(?i)ID\d+", s):
+        return s.upper()
+
     for pat in _MOUSE_ID_PATTERNS:
         m = pat.search(s)
         if m:
             return f"{m.group('cage')}_ID{m.group('num')}"
     raise ValueError(f"Could not extract mouse_id from raw identifier: {raw!r}")
-
 
 
 def load_subjects(subjects_csv: Union[str, Path]) -> pd.DataFrame:
@@ -45,7 +48,7 @@ def load_subjects(subjects_csv: Union[str, Path]) -> pd.DataFrame:
     subjects["group"] = subjects["group"].astype(str).str.strip().str.lower()
     subjects["sex"] = subjects["sex"].astype(str).str.strip().str.lower()
 
-    allowed_groups = {"cup", "tail"}
+    allowed_groups = {"cup", "tail", "control", "stress"}
     bad_groups = set(subjects["group"].unique()) - allowed_groups
     if bad_groups:
         raise ValueError(f"Unexpected group labels in subjects.csv: {sorted(bad_groups)}")

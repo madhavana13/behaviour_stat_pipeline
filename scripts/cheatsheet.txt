@@ -1,3 +1,5 @@
+running assays:
+
 python scripts/run_assay.py --assay OFT --root ".\data\raw\oft"     
 python scripts/run_assay.py --assay VIT --root ".\data\raw\vit"    
 python scripts/run_assay.py --assay EPM --root ".\data\raw\epm"  
@@ -5,7 +7,15 @@ python scripts/run_assay.py --assay NOR --root ".\data\raw\nor"
 
 python scripts/run_stats.py --config configs/stats.yaml --assays nor
 
+
+To create new files/folders:
+
 New-Item -ItemType Directory -Path src\behaviour_stat_pipeline\figures -Force | Out-Null
-New-Item -ItemType File -Path src\behaviour_stat_pipeline\figures\__init__.py -Force
-New-Item -ItemType File -Path src\behaviour_stat_pipeline\figures\common.py -Force
-New-Item -ItemType File -Path src\behaviour_stat_pipeline\figures\cellmeans.py -Force
+New-Item -ItemType File -Path src\behaviour_stat_pipeline\figures\
+New-Item -ItemType Directory -Path scripts/derive_vit_processed.py
+
+
+For running all assays together:
+
+python scripts/run_stats.py --config configs/stats.yaml
+python scripts/run_figures.py --config configs/stats.yaml
