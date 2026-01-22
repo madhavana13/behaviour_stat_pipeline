@@ -133,7 +133,7 @@ def plot_group_boxpoints(
     xticks = []
     xticklabels = []
 
-    base = 1.0
+    base = 0.1
 
     if n_x == 1:
         # Simple layout: groups side-by-side for single x category (e.g. Total)
@@ -226,6 +226,7 @@ def plot_group_boxpoints(
     ax.set_xticks(xticks)
     ax.set_xticklabels(xticklabels, rotation=0)
 
+
     # Add group labels under blocks (optional but helpful)
     # Place group label centered under each block
     ymin, ymax = ax.get_ylim()
@@ -282,7 +283,8 @@ def plot_group_boxpoints(
     ax.spines["right"].set_visible(False)
     ax.spines["left"].set_linewidth(2)
     ax.spines["bottom"].set_linewidth(2)
-    ax.tick_params(width=2)
+    ax.tick_params(width=1)
+    ax.set_ylim(bottom=0)
 
     fig.tight_layout()
 

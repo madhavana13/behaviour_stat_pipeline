@@ -2,15 +2,31 @@
 data/raw/
 data/metadata/*.xlsx
 
-# Outputs
-outputs/
 
 # Python junk
 __pycache__/
 .ipynb_checkpoints/
 *.pyc
 .venv/
-# Generated outputs
+
+
+# ---- Data ----
 data/processed/
 data/interim/
 data/metadata/
+
+# ---- Outputs ----
+outputs/
+outputs/**
+
+# ---- Logs ----
+*.log
+*.txt
+
+# ---- Figures ----
+*.png
+*.pdf
+*.svg
+
+# ---- Tables ----
+*.csv

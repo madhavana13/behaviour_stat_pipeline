@@ -175,7 +175,7 @@ correlations:
   # multiple-comparison correction across all tests produced by each spec
   correction: fdr_bh         # holm | bonferroni | sidak | fdr_bh | fdr_by | none
 
-  min_n: 08                  # minimum N per group to run correlation
+  min_n: 8                  # minimum N per group to run correlation
 
   # minimal per-spec definitions
   specs:
@@ -203,7 +203,6 @@ correlations:
       groupings:
         - []                 # optional override (pooled only)
 
-
 figures:
   enabled: true
 
@@ -221,7 +220,9 @@ figures:
     # aesthetics  
     group_edgecolors:
       tail: "black"
-      cup: "OrangeRed"
+      cup: "darkorange"
+      centre: "RoyalBlue"
+      narrow_centre: "MediumSeaGreen"
     sex_markers:
       female: "o"
       male: "^"
@@ -230,17 +231,18 @@ figures:
         Total: ""
 
     # layout + geometry (these are the ones your runner actually reads)
-    group_gap: 0.15
-    box_width: 0.30
-    sex_dodge: 0.06
-    figure_size: [6.0, 4.8]   # inches
+    group_gap: 0.10     # smaller = groups closer
+    box_width: 0.25     # slimmer boxes
+    x_gap: 0.8            # less horizontal gap between x categories within groups
+    sex_dodge: 0.05     # slightly tighter male/female dodge
+    figure_size: [5.2, 4.2]
     dpi: 300
     group_order: ["tail", "cup", "centre", "narrow_centre"]
 
     # point styling
-    jitter_sd: 0.18
-    point_size: 22
-    point_alpha: 0.9
+    jitter_sd: 0.09     # less horizontal noise
+    point_size: 14      # slightly smaller points
+    point_alpha: 0.85   # a touch more subtle
 
     # statistical annotations
     significance:
@@ -285,13 +287,28 @@ figures:
     - name: "test_total distance moved"
       assay: "nor"
       type: "boxpoints"
-      value_label: "Distance moved (cm)"
+      x_gap: 0.8
+      value_label: "Distance moved (m)"
       x_order: ["Total"]
       group_order: ["tail", "cup"]
       wide_to_long:
         x_col: "measure"
         mapping:
           Total: "test_total distance moved"
+
+    - name: "Time in Alleys"
+      assay: "lm"
+      type: "boxpoints"
+      x_gap: 0.65
+      value_label: "Time (s)"
+      x_order: ["Protected", "Centre", "Narrow"]
+      group_order: ["centre", "narrow_centre"]
+      wide_to_long:
+        x_col: "measure"
+        mapping:
+          Protected: "lm_time_protected_s"
+          Centre: "lm_time_center_s"
+          Narrow: "lm_time_narrow_s"          
 
   auto_from_correlations:
     enabled: true
