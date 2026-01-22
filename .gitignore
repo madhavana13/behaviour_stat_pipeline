@@ -1,9 +1,8 @@
 # Raw data (keep local)
-data/raw/
-data/metadata/*.xlsx
+
 
 # Outputs
-outputs/
+
 
 # Python junk
 __pycache__/
@@ -11,6 +10,4 @@ __pycache__/
 *.pyc
 .venv/
 # Generated outputs
-data/processed/
-data/interim/
-data/metadata/
+

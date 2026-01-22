@@ -1,0 +1,2 @@
+assay,spec_name,analysis_type,method,grouping,group_key,x,y,n,statistic,p_value,beta_x,se_x,t_x,df_resid,correction_method,correction_scope,m_tests,p_adj
+LM,lm_lm_time_narrow_s_vs_lm_dist_total,corr,pearson,pooled,ALL,lm_time_narrow_s,lm_dist_total,26,0.6058823513543804,0.0010367367200506334,,,,,fdr_bh,within_spec,1,0.0010367367200506334

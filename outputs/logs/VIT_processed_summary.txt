@@ -1,0 +1,15 @@
+[2026-01-22 14:54:51] ASSAY=VIT
+Saved CSV: data/processed/VIT_processed.csv
+Rows: 32
+Unique mice: 32
+Files: 4
+
+Counts:
+group  sex   
+cup    female    8
+       male      8
+tail   female    8
+       male      8
+
+VIT completeness WARNING: 2/32 mice missing ≥1 cell.
+Examples (up to 10): 27A_ID16 -> ['After:hand']; 27B_ID7 -> ['After:hand']
