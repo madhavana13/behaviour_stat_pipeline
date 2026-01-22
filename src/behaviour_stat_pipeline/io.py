@@ -48,7 +48,7 @@ def load_subjects(subjects_csv: Union[str, Path]) -> pd.DataFrame:
     subjects["group"] = subjects["group"].astype(str).str.strip().str.lower()
     subjects["sex"] = subjects["sex"].astype(str).str.strip().str.lower()
 
-    allowed_groups = {"cup", "tail", "control", "stress"}
+    allowed_groups = {"cup", "tail", "control", "stress", "centre", "narrow_centre", "crs", "ars"}
     bad_groups = set(subjects["group"].unique()) - allowed_groups
     if bad_groups:
         raise ValueError(f"Unexpected group labels in subjects.csv: {sorted(bad_groups)}")
