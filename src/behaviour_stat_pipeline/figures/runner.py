@@ -304,7 +304,7 @@ def run_figures_from_config(
             id_cols = [mouse_id_col, group_col, sex_col]
             long_df = _make_long_from_mapping(df, x_col=x_col, mapping=mapping, id_cols=id_cols)
 
-            # Per-spec style overrides (only relevant for boxpoints)
+            # --- style overrides ---
             style_spec = PlotStyle(
                 group_edgecolors=style.group_edgecolors,
                 sex_markers=style.sex_markers,
@@ -320,6 +320,29 @@ def run_figures_from_config(
                 group_gap=float(spec.get("group_gap", style.group_gap)),
             )
 
+            # --- optional ANOVA-based significance annotation (main effects only) ---
+            sig_cfg = (defaults.get("significance", {}) or {}).copy()
+            sig_cfg.update(spec.get("significance", {}) or {})
+
+            anova_cfg = (sig_cfg.get("anova_summary", {}) or {}).copy()
+            anova_df = None
+
+            if bool(sig_cfg.get("enabled", False)) and bool(anova_cfg.get("enabled", False)):
+                table_key = str(anova_cfg.get("table", "secondary_two_way_anova")).strip()
+            table_path = out_figures.parent / "tables" / f"{assay.upper()}_{table_key}.csv"
+
+            if table_path.exists():
+                anova_df = pd.read_csv(table_path)
+            else:
+                anova_df = None
+
+            # --- draw plot ---
+            anova_endpoint = None
+            mapped = list(mapping.values())
+            mapped = [str(m) for m in mapped if m is not None]
+            if len(set(mapped)) == 1:
+                anova_endpoint = mapped[0]
+
             plot_group_boxpoints(
                 df=long_df,
                 value_col="value",
@@ -329,6 +352,7 @@ def run_figures_from_config(
                 mouse_id_col=mouse_id_col,
                 assay=assay.upper(),
                 endpoint=name,
+                anova_endpoint=anova_endpoint,
                 out_paths=out_paths,
                 x_order=x_order,
                 group_order=group_order,
@@ -337,9 +361,12 @@ def run_figures_from_config(
                 title=None,
                 y_label=value_label,
                 show=False,
+                anova_df=anova_df,
+                anova_cfg=anova_cfg,
             )
 
             written.extend(out_paths)
+
 
         elif plot_type == "scatter":
             x = spec.get("x")

@@ -1,6 +1,6 @@
 @echo off
 REM ==========================================
-REM  behaviour_stat_pipeline – DEMO
+REM  behaviour_stat_pipeline – INTERACTIVE DEMO
 REM ==========================================
 
 echo.
@@ -11,10 +11,24 @@ echo.
 
 REM ---- Config ----
 set PYTHON=python
-set ASSAY=NOR
 set STATS_CONFIG=configs\stats.yaml
-set FIG_CONFIG=configs\figures.yaml
+set FIG_CONFIG=configs\stats.yaml
 REM ----------------
+
+echo Available assays:
+echo   NOR  OFT  EPM  VIT  LM 
+echo.
+
+set /p ASSAY=Enter assay to run (default: NOR): 
+
+if "%ASSAY%"=="" set ASSAY=NOR
+
+REM Normalize to uppercase
+for %%A in (%ASSAY%) do set ASSAY=%%~A
+
+echo.
+echo Selected assay: %ASSAY%
+echo.
 
 echo [1/2] Running stats for %ASSAY%...
 %PYTHON% scripts\run_stats.py ^
@@ -42,7 +56,7 @@ if errorlevel 1 (
 )
 
 echo.
-echo Demo completed successfully!
+echo Demo completed successfully for %ASSAY%!
 echo.
 echo Tables  → outputs\tables\
 echo Figures → outputs\figures\

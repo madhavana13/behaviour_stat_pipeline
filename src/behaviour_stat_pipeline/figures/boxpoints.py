@@ -10,6 +10,73 @@ import matplotlib.pyplot as plt
 from .common import PlotStyle, infer_order, require_columns
 from .common import jitter_from_ids
 
+import numpy as np
+import pandas as pd
+
+
+def _parse_term_to_key(term: str) -> str:
+    """
+    Map statsmodels term strings to compact keys.
+    """
+    t = str(term)
+    if ":C(Q(\"sex\"))" in t and "C(Q(\"group\"))" in t:
+        return "interaction"
+    if "C(Q(\"group\"))" in t:
+        return "group"
+    if "C(Q(\"sex\"))" in t:
+        return "sex"
+    return ""
+
+
+def _stars_from_label(label: str) -> str:
+    """
+    Convert your stored significance_label into stars.
+    Accepts: 'ns', '<0.05', '<0.01', '<0.001', '<0.0001'
+    """
+    s = str(label).strip().lower()
+    if s in ("ns", "", "nan", "none"):
+        return ""
+    if "<0.0001" in s:
+        return "****"
+    if "<0.001" in s:
+        return "***"
+    if "<0.01" in s:
+        return "**"
+    if "<0.05" in s:
+        return "*"
+    # fallback: if label already stars
+    if set(s) <= set("*"):
+        return s
+    return ""
+
+
+def _draw_main_effect_bracket(
+    *,
+    ax,
+    x1: float,
+    x2: float,
+    label: str,
+    y_pad_frac: float = 0.05,
+    h_frac: float = 0.03,
+    lw: float = 1.2,
+):
+    """
+    Draw a bracket from x1 to x2 at the top of the plot with a star label.
+    """
+    if not label:
+        return
+
+    y0, y1 = ax.get_ylim()
+    yr = y1 - y0
+
+    # place above current top, then extend ylim
+    y = y1 + y_pad_frac * yr
+    h = h_frac * yr
+
+    ax.plot([x1, x1, x2, x2], [y, y + h, y + h, y], color="black", linewidth=lw, clip_on=False)
+    ax.text((x1 + x2) / 2, y + h, label, ha="center", va="bottom")
+
+    ax.set_ylim(y0, y + h + y_pad_frac * yr)
 
 
 def plot_group_boxpoints(
@@ -29,7 +96,10 @@ def plot_group_boxpoints(
     style: Optional[PlotStyle] = None,
     title: Optional[str] = None,
     y_label: Optional[str] = None,
+    anova_endpoint: Optional[str] = None,
     show: bool = False,
+    anova_df=None,
+    anova_cfg=None,
 ) -> None:
     """
     Draw Prism-like box+whisker plots with individual points:
@@ -167,6 +237,43 @@ def plot_group_boxpoints(
     ax.set_title(title or f"{assay} — {endpoint}", fontsize=12)
     ax.set_ylabel(y_label or endpoint)
     ax.set_xlabel("")
+
+    # --- main-effect significance annotation (collapsed plots) ---
+    if anova_cfg and bool(anova_cfg.get("enabled", False)) and anova_df is not None and not anova_df.empty:
+        endpoint_col = str(anova_cfg.get("endpoint_col", "endpoint"))
+        term_col = str(anova_cfg.get("term_col", "term"))
+        label_col = str(anova_cfg.get("label_col", "significance_label"))
+
+        key = anova_endpoint if anova_endpoint else endpoint
+        sub = anova_df[anova_df[endpoint_col].astype(str) == str(key)]
+
+        if not sub.empty and term_col in sub.columns and label_col in sub.columns:
+            # only main effect of group makes sense for your collapsed Cup vs Tail plots
+            row = None
+            for _, r in sub.iterrows():
+                if _parse_term_to_key(r[term_col]) == "group":
+                    row = r
+                    break
+
+            if row is not None:
+                stars = _stars_from_label(row[label_col])
+
+                # only draw if there are >=2 groups and exactly one x-level
+                if stars and len(g_levels) >= 2 and len(x_levels) == 1:
+                    x = x_levels[0]
+                    g1 = g_levels[0]
+                    g2 = g_levels[-1]
+                    x1 = float(positions[(g1, x)])
+                    x2 = float(positions[(g2, x)])
+                    _draw_main_effect_bracket(
+                        ax=ax,
+                        x1=min(x1, x2),
+                        x2=max(x1, x2),
+                        label=stars,
+                        y_pad_frac=float(anova_cfg.get("y_pad_frac", 0.05)),
+                        h_frac=float(anova_cfg.get("h_frac", 0.03)),
+                        lw=float(anova_cfg.get("linewidth", 1.2)),
+                    )
 
     # Aesthetic: Prism-like axes
     ax.spines["top"].set_visible(False)
