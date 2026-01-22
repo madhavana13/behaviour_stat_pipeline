@@ -69,6 +69,23 @@ def derive_lm_metrics(df: pd.DataFrame, cfg: LMConfig | None = None) -> pd.DataF
         out["lm_time_narrow_s"],
         out["lm_time_narrow_s"] + out["lm_time_protected_s"],
     )
+    # --- Unprotected zone (center + narrow) ---
+    out["lm_time_unprotected_s"] = out["lm_time_center_s"] + out["lm_time_narrow_s"]
+
+    out["lm_pct_time_unprotected"] = _safe_div(
+        out["lm_time_unprotected_s"], out["lm_time_total_s"]
+    )
+
+    # Narrow preference *within* unprotected area
+    out["lm_pct_narrow_within_unprotected"] = _safe_div(
+        out["lm_time_narrow_s"], out["lm_time_unprotected_s"]
+    )
+
+    # Direct contrast: narrow vs center
+    out["lm_delta_time_narrow_minus_center_s"] = (
+        out["lm_time_narrow_s"] - out["lm_time_center_s"]
+    )
+
 
     out["is_after"] = (out["timepoint"].astype(str).str.lower() == "after").astype(int)
 

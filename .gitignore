@@ -13,4 +13,4 @@ __pycache__/
 # Generated outputs
 data/processed/
 data/interim/
-
+data/metadata/
