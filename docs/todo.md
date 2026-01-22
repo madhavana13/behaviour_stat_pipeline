@@ -1,167 +1,141 @@
-High-priority (next iterations)
-Figures: label handling & UX
+# Behaviour Stats Pipeline — TODO / Roadmap
 
- Implement label_maps support for figures
+This document tracks known limitations, planned improvements, and polish items
+for the behavioural statistics and figure pipeline.
 
-Map raw values → display labels (e.g. cup → Cup, tail → Tail)
+Items are grouped by priority and subsystem.
+
+---
 
-Apply to:
+## High priority
+
+### Figures: labels and axis handling
 
-group labels
+- [ ] Implement label mapping for figures
+  - Map raw values to display labels (e.g. cup → Cup, tail → Tail)
+  - Apply to:
+    - group labels
+    - sex labels
+    - auto-generated x-axis labels
+  - Config-driven via:
+    stats.yaml → figures.defaults.label_maps
+  - Motivation:
+    avoid hard-coding capitalization into metadata files
 
-sex labels
+- [ ] Improve handling of single-level x-axes
+  - Auto-generated endpoint plots currently use a single x-level ("Total"/"All")
+  - Desired behavior:
+    - if only one x-level exists, suppress x-axis label
+    - plot by group only
+  - Current workaround:
+    rename "Total" → "All" in auto specs
 
-auto-generated x-axis labels
+---
+
+### Figures: statistical annotations
 
-Config-driven via stats.yaml → figures.defaults.label_maps
+- [ ] Add significance annotations to boxplots
+  - Read directly from stats outputs:
+    - *_secondary_two_way_anova.csv
+    - *_secondary_posthoc_cellmeans.csv
+  - Prism-style annotations:
+    - stars (*, **, ***)
+    - optional brackets for pairwise comparisons
+  - Configurable per assay and per endpoint
+  - Must fail loudly if stats are missing or ambiguous
 
-Motivation: avoid hard-coding capitalization into metadata
+---
 
- Hide or simplify single-level x-axes
+## Medium priority
 
-For auto-generated endpoint plots, avoid showing redundant labels (formerly "Total")
+### Figures: time-series and line plots
 
-Current workaround: rename "Total" → "All" in auto specs
+- [ ] Add line / timecourse plot support
+  - For assays with ordered phases (e.g. VIT)
+  - New figure types:
+    - linepoints
+    - line_mean_sem
+  - Support:
+    - within-subject trajectories
+    - group mean ± SEM
+  - Fully config-driven via figures.specs
 
-Desired behavior: if only one x-level exists, label by group only
+---
 
-Figures: significance annotations
+### Stats: correlations and exploratory models
 
- Add significance stars / brackets to boxplots
+- [ ] Extend correlation figures
+  - Optional regression lines per subgroup
+  - Grouping options:
+    - pooled
+    - by group
+    - by sex
+  - Config flags:
+    correlations.auto_from_correlations.fit.by
 
-Read directly from stats outputs:
+- [ ] Optional nonparametric tests
+  - Mann–Whitney U
+  - Kruskal–Wallis
+  - Explicit opt-in per endpoint
+  - No silent switching based on assumptions
 
-*_secondary_two_way_anova.csv
+---
 
-*_secondary_posthoc_cellmeans.csv
+## Low priority
 
-Prism-style annotations:
+### Config ergonomics and validation
 
-*, **, ***
+- [ ] Add explicit config validation
+  - Catch typos and missing keys in stats.yaml
+  - Fail early with clear error messages
+  - Prefer lightweight schema validation
 
-optional brackets for pairwise comparisons
+- [ ] Improve defaults for single-session assays
+  - Auto-detect non-informative timepoints
+  - Reduce boilerplate in stats and figures configs
 
-Configurable per assay / endpoint
+---
 
-Should fail gracefully if stats are missing
+### Documentation
 
-Medium-priority (feature completeness)
-Figures: time-series / line plots
-
- Add line / timecourse plot support
-
-For assays with ordered phases (e.g. VIT: first min → second min)
-
-New figure type: linepoints or line_mean_sem
-
-Support:
-
-within-subject trajectories
-
-group mean ± SEM
-
-Config-driven via figures.specs
-
-Stats: correlations & exploratory models
-
- Extend correlations auto-figures
-
-Allow grouping by sex / group in scatter plots
-
-Optional regression lines per subgroup
-
-Config flags:
-
-fit.by: pooled | group | sex
-
- Optional nonparametric tests
-
-Add support for:
-
-Mann–Whitney U
-
-Kruskal–Wallis
-
-Explicit opt-in per endpoint (avoid silent switching)
-
-Low-priority (polish / robustness)
-Config ergonomics
-
- Validate config schema explicitly
-
-Catch typos in stats.yaml early
-
-Helpful error messages for missing keys
-
-Possibly via a lightweight schema validator
-
- Better defaults for single-session assays
-
-Auto-detect when timepoint is non-informative
-
-Reduce boilerplate in figures/stats configs
-
-Documentation
-
- Assay-level READMEs
-
-LM: done
-
- OFT
-
- EPM
-
- NOR
-
- VIT
-
- End-to-end example
-
-Raw data → processed → stats → figures
-
-Minimal dataset + config snippet
-
-Repo / engineering hygiene
-
- Add smoke tests for figures
-
-Ensure figure generation doesn’t crash on minimal data
-
- Add CI check for config + import sanity
-
- Versioned changelog
-
-Track behavior-affecting changes (especially stats/figures)
-
-Design principles (do not violate)
-
-One YAML (stats.yaml) is the single source of truth for:
-
-stats
-
-figures
-
-correlations
-
-Derived data is append-only
-
-No silent statistical behavior changes
-
-Prefer config over code branching
-
-Shared code paths must remain backward compatible
-
-Nice-to-have / aspirational (py3r polish)
-
- Interactive HTML figure export
-
- Small multiples for multi-endpoint assays
-
- Metadata-aware color palettes
-
- Automatic figure captions (methods-ready)
-
-Notes
-
-This list is intentionally conservative.
-Items are added only when they solve a real pain point observed during analysis, not for speculative completeness.
+- [ ] Assay-level documentation
+  - LM (done)
+  - OFT
+  - EPM
+  - NOR
+  - VIT
+
+- [ ] End-to-end worked example
+  - Raw data → processed → stats → figures
+  - Minimal dataset
+  - Minimal config snippet
+
+---
+
+### Engineering and robustness
+
+- [ ] Add smoke tests for figure generation
+  - Ensure figures run on minimal datasets
+- [ ] Add CI check for imports and config parsing
+- [ ] Maintain a changelog for behavior-affecting changes
+
+---
+
+## Design constraints (do not violate)
+
+- One YAML (stats.yaml) is the single source of truth for:
+  - statistics
+  - figures
+  - correlations
+- Derived data must be append-only
+- No silent statistical behavior changes
+- Prefer config over branching logic
+- Shared code paths must remain backward compatible
+
+---
+
+## Notes
+
+This roadmap is intentionally conservative.
+Items are added only when motivated by real analysis needs,
+not speculative completeness.
