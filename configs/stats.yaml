@@ -25,6 +25,7 @@ design:
     oft: []
     epm: []
     nor: []
+    lm: []
 
 optional:
   blocking_factors: []         # e.g., [cohort, batch] later
@@ -35,6 +36,7 @@ assays:
   - nor
   - oft
   - epm
+  - lm
 
 primary_one_sample:
   enabled: true
@@ -87,6 +89,12 @@ diagnostics:
       - "did__total distance moved"
       - "did__average speed"
       - "delta_after_minus_before__hand__total distance moved"
+    lm:
+      - lm_time_narrow_s
+      - lm_dist_total
+      - lm_pct_time_narrow
+      - lm_delta_time_narrow_minus_center_s
+      - lm_pct_narrow_within_unprotected  
 
 secondary_two_way_anova:
   enabled: true
@@ -119,6 +127,13 @@ secondary_two_way_anova:
       - "did__total distance moved"
       - "did__average speed"
       - "delta_after_minus_before__hand__total distance moved"
+    lm:
+      - lm_time_narrow_s
+      - lm_dist_total
+      - lm_pct_time_narrow
+      - lm_delta_time_narrow_minus_center_s
+      - lm_pct_narrow_within_unprotected
+
 
   posthoc:
     enabled: true
@@ -160,7 +175,7 @@ correlations:
   # multiple-comparison correction across all tests produced by each spec
   correction: fdr_bh         # holm | bonferroni | sidak | fdr_bh | fdr_by | none
 
-  min_n: 6
+  min_n: 08                  # minimum N per group to run correlation
 
   # minimal per-spec definitions
   specs:
@@ -179,6 +194,10 @@ correlations:
     - assay: vit
       x: "did__total distance moved"
       y: "delta_after_minus_before__hand__total distance moved"
+
+    - assay: lm
+      x: "lm_time_narrow_s"
+      y: "lm_dist_total"  
 
       method: pearson        # optional override
       groupings:
@@ -203,10 +222,13 @@ figures:
   
     group_edgecolors:
       tail: "black"
-      cup: "orange"
+      cup: "OrangeRed"
     sex_markers:
       female: "o"
       male: "^"
+    label_maps:
+      timepoint:
+        Total: ""
 
     # layout + geometry (these are the ones your runner actually reads)
     group_gap: 0.15
@@ -214,7 +236,7 @@ figures:
     sex_dodge: 0.06
     figure_size: [6.0, 4.8]   # inches
     dpi: 300
-    group_order: ["tail", "cup"]
+    group_order: ["centre", "narrow_centre"]
 
     # point styling
     jitter_sd: 0.18
