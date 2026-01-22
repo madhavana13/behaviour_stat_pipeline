@@ -11,6 +11,7 @@ from behaviour_stat_pipeline.assays.oft import qc_oft, derive_oft_metrics, OFTCo
 from behaviour_stat_pipeline.assays.epm import qc_epm, derive_epm_metrics, EPMConfig
 from behaviour_stat_pipeline.common.qc import warn_missing_subjects_coverage
 from behaviour_stat_pipeline.assays.nor import derive_nor_metrics, NORConfig, summarize_nor_sanity
+from behaviour_stat_pipeline.assays.lm import qc_lm, derive_lm_metrics, LMConfig
 from behaviour_stat_pipeline.common.derive import save_processed
 
 
@@ -219,11 +220,55 @@ def run_nor(args: argparse.Namespace) -> None:
     print(f"Saved: {res.out_csv}")
     print(f"Summary: {res.out_summary}")
 
+def run_lm(args: argparse.Namespace) -> None:
+    root = Path(args.root)
+    files = sorted(root.rglob(args.pattern))
+    if not files:
+        raise FileNotFoundError(f"No files found under {root} matching {args.pattern}")
+
+    subjects = load_subjects(args.subjects)
+
+    dfs = []
+    for f in files:
+        df = load_tracking_csv(f, raw_id_col=args.raw_id_col)
+        df = merge_subject_metadata(df, subjects, on_missing_subjects="warn_drop")
+
+        df["assay"] = "LM"
+        df["source_file"] = str(f)
+
+        # OFT/EPM do not encode timepoint in filename; treat this run as one session.
+        df["timepoint"] = "Single"
+
+        dfs.append(df)
+
+    lm_long = pd.concat(dfs, ignore_index=True)
+    from behaviour_stat_pipeline.common.qc import warn_missing_subjects_coverage
+    coverage_msg = warn_missing_subjects_coverage(lm_long["mouse_id"], subjects, where="LM")
+
+    # QC + derive
+    qc_lm(lm_long)
+    lm_processed = derive_lm_metrics(lm_long, cfg=LMConfig())
+
+    out_path = Path(args.out) if args.out else Path("data/processed/LM_processed.csv")
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    extra_lines = [coverage_msg] if coverage_msg else []
+
+    res = save_processed(
+        lm_processed,
+        out_csv=out_path,
+        assay="LM",
+        files_n=len(files),
+        extra_lines=extra_lines,
+    )
+    print(f"Saved: {res.out_csv}")
+    print(f"Summary: {res.out_summary}")
+
 ASSAY_RUNNERS = {
     "VIT": run_vit, 
     "OFT": run_oft,
     "EPM": run_epm,
     "NOR": run_nor,
+    "LM": run_lm,
 }
 
 
