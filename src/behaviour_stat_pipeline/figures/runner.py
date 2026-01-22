@@ -222,6 +222,7 @@ def run_figures_from_config(
         sex_dodge=float(defaults.get("sex_dodge", 0.06)),
         jitter_sd=float(defaults.get("jitter_sd", 0.18)),
         point_size=float(defaults.get("point_size", 28.0)),
+        x_gap=float(defaults.get("x_gap", 0.8)),
         point_alpha=float(defaults.get("point_alpha", 0.9)),
     )
 
@@ -317,6 +318,7 @@ def run_figures_from_config(
                 point_alpha=float(spec.get("point_alpha", style.point_alpha)),
                 jitter_sd=float(spec.get("jitter_sd", style.jitter_sd)),
                 sex_dodge=float(spec.get("sex_dodge", style.sex_dodge)),
+                x_gap=float(spec.get("x_gap", style.x_gap)),
                 group_gap=float(spec.get("group_gap", style.group_gap)),
             )
 
@@ -329,10 +331,11 @@ def run_figures_from_config(
 
             if bool(sig_cfg.get("enabled", False)) and bool(anova_cfg.get("enabled", False)):
                 table_key = str(anova_cfg.get("table", "secondary_two_way_anova")).strip()
-            table_path = out_figures.parent / "tables" / f"{assay.upper()}_{table_key}.csv"
+                table_path = out_figures.parent / "tables" / f"{assay.upper()}_{table_key}.csv"
 
-            if table_path.exists():
-                anova_df = pd.read_csv(table_path)
+                if table_path.exists():
+                    anova_df = pd.read_csv(table_path)
+
             else:
                 anova_df = None
 

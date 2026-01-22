@@ -21,6 +21,7 @@ class PlotStyle:
     whisker_linewidth: float = 2.0
     cap_linewidth: float = 2.0
     box_width: float = 0.45
+    x_gap: float = 0.8
 
     # point aesthetics
     point_size: float = 28.0

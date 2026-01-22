@@ -1,0 +1,14 @@
+[2026-01-22 12:00:16] ASSAY=EPM
+Saved CSV: data/processed/EPM_processed.csv
+Rows: 29
+Unique mice: 29
+Files: 2
+
+Counts:
+timepoint  group  sex   
+Single     cup    female    7
+                  male      8
+           tail   female    6
+                  male      8
+
+WARNING [EPM]: 3 subject mouse_ids not present in this run's data: ['27A_ID15', '27A_ID16', '27B_ID15']

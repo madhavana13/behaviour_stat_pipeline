@@ -1,0 +1,14 @@
+[2026-01-22 14:08:58] ASSAY=LM
+Saved CSV: data/processed/LM_processed.csv
+Rows: 26
+Unique mice: 26
+Files: 1
+
+Counts:
+timepoint  group          sex   
+Single     centre         female    11
+                          male       7
+           narrow_centre  female     2
+                          male       6
+
+WARNING [LM]: 1 subject mouse_ids not present in this run's data: ['ID1']

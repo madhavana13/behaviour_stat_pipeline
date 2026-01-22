@@ -145,17 +145,19 @@ def plot_group_boxpoints(
             xticklabels.append(str(x))  # keep "Total" under each group
     else:
         # Block layout: x categories within each group, with group_gap between blocks
-        group_block_width = n_x + 0.4
+        x_gap = getattr(style, "x_gap", 0.8)  # default keeps current behavior
+
+        group_block_width = (n_x - 1) * x_gap + 1.0 + 0.4  # scaled width
         for gi, g in enumerate(g_levels):
             block_start = base + gi * (group_block_width + style.group_gap)
             for xi, x in enumerate(x_levels):
-                pos = block_start + xi
+                pos = block_start + xi * x_gap
                 positions[(g, x)] = pos
                 xticks.append(pos)
                 xticklabels.append(str(x))
 
 
-    fig, ax = plt.subplots(figsize=(6.0, 4.8), dpi=300)
+    fig, ax = plt.subplots(figsize=(5.2, 4.2), dpi=300)
 
     # Draw boxes per (group, x)
     for g in g_levels:
