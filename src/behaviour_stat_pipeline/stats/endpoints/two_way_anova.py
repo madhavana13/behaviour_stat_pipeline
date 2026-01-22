@@ -3,7 +3,23 @@ from __future__ import annotations
 import pandas as pd
 import statsmodels.api as sm
 import statsmodels.formula.api as smf
+import numpy as np
 
+
+def _significance_label(p: float) -> str:
+    """Prism-like threshold labels based on adjusted p-value."""
+    if not np.isfinite(p):
+        return ""
+    if p < 1e-4:
+        return "<0.0001"
+    elif p < 1e-3:
+        return "<0.001"
+    elif p < 1e-2:
+        return "<0.01"
+    elif p < 5e-2:
+        return "<0.05"
+    else:
+        return "ns"
 
 def run_two_way_anova(
     df: pd.DataFrame,
@@ -63,5 +79,6 @@ def run_two_way_anova(
 
     # Standardize columns
     aov = aov.rename(columns={"PR(>F)": "p_value"})
+    aov["significance_label"] = aov["p_value"].apply(_significance_label)
     keep = [c for c in ["assay", "endpoint", "term", "sum_sq", "df", "F", "p_value", "n", "typ", "include_interaction"] if c in aov.columns]
     return aov[keep].reset_index(drop=True)

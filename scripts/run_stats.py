@@ -22,7 +22,7 @@ from behaviour_stat_pipeline.stats.common import (
 )
 from behaviour_stat_pipeline.stats.diagnostics import endpoint_diagnostics
 from behaviour_stat_pipeline.stats.endpoints.one_sample import run_one_sample_by_group
-from behaviour_stat_pipeline.stats.endpoints.two_way_anova import run_two_way_anova
+from behaviour_stat_pipeline.stats.endpoints.two_way_anova import run_two_way_anova, _significance_label
 from behaviour_stat_pipeline.stats.endpoints.simple_effects import run_simple_effects, SimpleEffectsSpec
 from behaviour_stat_pipeline.stats.common import load_stats_config
 from behaviour_stat_pipeline.stats.corrections import adjust_pvalues
@@ -159,6 +159,19 @@ def main() -> None:
                     )
                 else:
                     aov_all["p_adj"] = aov_all["p_value"]
+                # Correct across endpoints for each term separately (recommended)
+                method = cfg.secondary_two_way_anova_correction
+                if method.lower() != "none":
+                    aov_all["p_adj"] = aov_all.groupby("term", dropna=False, observed=False)["p_value"].transform(
+                        lambda s: adjust_pvalues(s, method=method)
+                    )
+                else:
+                    aov_all["p_adj"] = aov_all["p_value"]
+
+                # ✅ ADD THIS HERE (use p_adj, not p_value)
+                aov_all["significance_label"] = aov_all["p_adj"].apply(_significance_label)
+
+                aov_all.to_csv(cfg.out_tables / f"{assay.upper()}_secondary_two_way_anova.csv", index=False)
 
                 aov_all.to_csv(cfg.out_tables / f"{assay.upper()}_secondary_two_way_anova.csv", index=False)
 
