@@ -13,6 +13,7 @@ dependencies = [
   "pyyaml>=6.0",
   "statsmodels>=0.14",
   "numpy>=1.23",
+  "scipy>=1.10",
 ]
 
 [tool.setuptools]
@@ -21,6 +22,6 @@ package-dir = {"" = "src"}
 [tool.setuptools.packages.find]
 where = ["src"]
 
-pip install pyyaml
-pip install scipy
-pip install statsmodels
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
