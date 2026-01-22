@@ -17,6 +17,8 @@ from dataclasses import dataclass
 
 import pandas as pd
 
+import numpy as np
+
 from behaviour_stat_pipeline.common.qc import assert_unique_key
 
 def vit_missing_cells_report(df: pd.DataFrame) -> str:
@@ -111,6 +113,72 @@ def qc_vit(df: pd.DataFrame) -> None:
     # We intentionally do not enforce perfect balance here, since later datasets may be unbalanced.
 
 
+def _derive_vit_wide(df_long: pd.DataFrame) -> pd.DataFrame:
+    """
+    Convert VIT long → wide and append standard contrasts.
+
+    Wide columns:
+      {phase}__{timepoint}__{metric}
+
+    Derived:
+      delta_after_minus_before__{phase}__{metric}
+      did__{metric}
+    """
+    id_cols = ["mouse_id", "group", "sex"]
+    within = ["timepoint", "phase"]
+
+    metric_cols = [
+        c for c in df_long.columns
+        if c not in id_cols + within and pd.api.types.is_numeric_dtype(df_long[c])
+    ]
+
+    if not metric_cols:
+        raise ValueError("[VIT] no numeric metric columns found for wide derivation")
+
+    wide = (
+        df_long
+        .set_index(id_cols + within)[metric_cols]
+        .unstack(["timepoint", "phase"])
+    )
+
+    # normalize column order → phase__timepoint__metric
+    wide = wide.reorder_levels([2, 1, 0], axis=1).sort_index(axis=1)
+    wide.columns = [
+        f"{phase}__{timepoint}__{metric}"
+        for phase, timepoint, metric in wide.columns
+    ]
+    wide = wide.reset_index()
+
+    derived = {}
+
+    def col(ph, tp, m):
+        return f"{ph}__{tp}__{m}"
+
+    phases = ["hand", "standing"]
+    metrics = metric_cols
+
+    for ph in phases:
+        for m in metrics:
+            a = col(ph, "After", m)
+            b = col(ph, "Before", m)
+            out = f"delta_after_minus_before__{ph}__{m}"
+            if a in wide.columns and b in wide.columns:
+                derived[out] = wide[a] - wide[b]
+            else:
+                derived[out] = np.nan
+
+    for m in metrics:
+        da = f"delta_after_minus_before__hand__{m}"
+        ds = f"delta_after_minus_before__standing__{m}"
+        out = f"did__{m}"
+        if da in derived and ds in derived:
+            derived[out] = derived[da] - derived[ds]
+        else:
+            derived[out] = np.nan
+
+    return pd.concat([wide, pd.DataFrame(derived)], axis=1)
+
+
 def derive_vit_metrics(df: pd.DataFrame, cfg: VITConfig | None = None) -> pd.DataFrame:
     """
     Add derived metrics for VIT.
@@ -131,11 +199,13 @@ def derive_vit_metrics(df: pd.DataFrame, cfg: VITConfig | None = None) -> pd.Dat
 
     out = df.copy()
 
-    # deterministic coding
+    # deterministic coding (kept for completeness / diagnostics)
     out["is_after"] = (out["timepoint"] == "After").astype(int)
     out["is_hand"] = (out["phase"] == "hand").astype(int)
 
-    return out
+    # WIDE + CONTRASTS (authoritative processed output)
+    wide = _derive_vit_wide(out)
+    return wide
 
 
 # Optional: declare suggested primary outcomes once you decide column names
