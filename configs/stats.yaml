@@ -223,8 +223,6 @@ figures:
     group_edgecolors:
       tail: "black"
       cup: "OrangeRed"
-      narrow_centre: "black"
-      centre: "OrangeRed"
     sex_markers:
       female: "o"
       male: "^"
@@ -265,28 +263,12 @@ figures:
       assay: "nor"
       type: "boxpoints"
       value_label: "Distance moved (cm)"
-      x_order: [""]
+      x_order: ["Total"]
       group_order: ["tail", "cup"]
       wide_to_long:
         x_col: "measure"
-        mapping: {"": "test_total distance moved"}
-
-    - name: "time_in_alleys"
-      assay: "lm"
-      type: "boxpoints"
-      value_label: "Time in alleys (s)"
-      x_order: ["Protected", "Centre", "Narrow"]
-      group_order: ["narrow_centre", "centre"]   # data values (ordering only)
-      wide_to_long:
-        x_col: "alley"
         mapping:
-          Protected: "lm_time_protected_s"
-          Centre: "lm_time_center_s"
-          Narrow: "lm_time_narrow_s"
-
-        
-
-     
+          Total: "test_total distance moved"
 
   auto_from_correlations:
     enabled: true
