@@ -48,8 +48,8 @@ def _auto_specs_from_endpoints(
 
     Generated plots are single-column "Total" plots:
       wide_to_long:
-        x_col: "measure"
-        mapping: {Total: <endpoint_column>}
+        x_col: ["ALL"]
+        mapping: {"ALL": endpoint}
 
     Multi-column plots (e.g., Familiar vs Novel) are NOT inferred here by design.
     """
@@ -88,10 +88,10 @@ def _auto_specs_from_endpoints(
                 "assay": assay.lower(),
                 "type": "boxpoints",
                 "value_label": endpoint,
-                "x_order": ["Total"],
+                "x_order": [""],
                 "wide_to_long": {
                     "x_col": "measure",
-                    "mapping": {"Total": endpoint},
+                    "mapping": {"": endpoint},
                 },
             }
         )
