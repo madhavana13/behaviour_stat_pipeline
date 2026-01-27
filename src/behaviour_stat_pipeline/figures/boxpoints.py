@@ -56,8 +56,9 @@ def _draw_main_effect_bracket(
     x1: float,
     x2: float,
     label: str,
-    y_pad_frac: float = 0.05,
-    h_frac: float = 0.03,
+    y_pad_frac: float = 0.08,
+    h_frac: float = 0.035,
+    title_buffer_frac: float = 0.12,
     lw: float = 1.2,
 ):
     """
@@ -69,14 +70,28 @@ def _draw_main_effect_bracket(
     y0, y1 = ax.get_ylim()
     yr = y1 - y0
 
-    # place above current top, then extend ylim
+    # place bracket clearly above data
     y = y1 + y_pad_frac * yr
     h = h_frac * yr
 
-    ax.plot([x1, x1, x2, x2], [y, y + h, y + h, y], color="black", linewidth=lw, clip_on=False)
-    ax.text((x1 + x2) / 2, y + h, label, ha="center", va="bottom")
+    ax.plot(
+        [x1, x1, x2, x2],
+        [y, y + h, y + h, y],
+        color="black",
+        linewidth=lw,
+        clip_on=False,
+    )
 
-    ax.set_ylim(y0, y + h + y_pad_frac * yr)
+    ax.text(
+        (x1 + x2) / 2,
+        y + h + 0.01 * yr,   # <-- small lift for stars
+        label,
+        ha="center",
+        va="bottom",
+    )
+
+    # extend ylim *generously* so title never overlaps
+    ax.set_ylim(y0, y + h + title_buffer_frac * yr)
 
 
 def plot_group_boxpoints(
@@ -244,7 +259,7 @@ def plot_group_boxpoints(
 
 
     # Labels / title
-    ax.set_title(title or f"{assay} — {endpoint}", fontsize=12)
+    ax.set_title(title or f"{assay} — {endpoint}", fontsize=12, pad=18)
     ax.set_ylabel(y_label or endpoint)
     ax.set_xlabel("")
 
@@ -293,7 +308,7 @@ def plot_group_boxpoints(
     ax.tick_params(width=1)
     ax.set_ylim(bottom=0)
 
-    fig.tight_layout()
+    fig.tight_layout(rect=[0, 0, 1, 0.92])
 
     for p in out_paths:
         p.parent.mkdir(parents=True, exist_ok=True)

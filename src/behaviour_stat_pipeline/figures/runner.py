@@ -36,12 +36,56 @@ def _make_long_from_mapping(
 
     return pd.concat(pieces, axis=0, ignore_index=True)
 
+def _load_label_map(cfg):
+    paths = cfg.get("paths", {}) or {}
+    p = paths.get("labels_csv", None)
+    if not p:
+        return None
+
+    df = pd.read_csv(p)
+    required = {"assay", "endpoint", "title", "y_label"}
+    missing = required - set(df.columns)
+    if missing:
+        raise ValueError(f"labels.csv missing columns: {missing}")
+
+    df["assay"] = df["assay"].astype(str).str.lower()
+    df["endpoint"] = df["endpoint"].astype(str)
+    return df
+
+def _label_for_axis(label_map: pd.DataFrame | None, assay: str, endpoint: str) -> str | None:
+    """
+    Return axis label for a column (e.g., 'Time (s)') from labels.csv.y_label.
+    Falls back to None if not found.
+    """
+    if label_map is None:
+        return None
+    m = label_map[(label_map["assay"] == assay.lower()) & (label_map["endpoint"] == str(endpoint))]
+    if m.empty:
+        return None
+    v = m.iloc[0].get("y_label", None)
+    return None if pd.isna(v) else str(v)
+
+
+def _label_for_title(label_map: pd.DataFrame | None, assay: str, endpoint: str) -> str | None:
+    """
+    Return human title for a column (e.g., 'Time in central alley') from labels.csv.title.
+    Falls back to None if not found.
+    """
+    if label_map is None:
+        return None
+    m = label_map[(label_map["assay"] == assay.lower()) & (label_map["endpoint"] == str(endpoint))]
+    if m.empty:
+        return None
+    v = m.iloc[0].get("title", None)
+    return None if pd.isna(v) else str(v)
+
 def _auto_specs_from_endpoints(
     *,
     config: Dict[str, Any],
     fig_cfg: Dict[str, Any],
     assay: str,
     df_columns: List[str],
+    label_map=None,
 ) -> List[Dict[str, Any]]:
     """
     Generate simple boxpoints specs for each endpoint in the chosen endpoint list.
@@ -82,12 +126,30 @@ def _auto_specs_from_endpoints(
         if endpoint in exclude:
             continue
 
+        row = None
+        if label_map is not None:
+            m = label_map[
+                (label_map["assay"] == assay.lower()) &
+                (label_map["endpoint"] == endpoint)
+            ]
+            if not m.empty:
+                row = m.iloc[0]
+
         out_specs.append(
             {
                 "name": endpoint,
                 "assay": assay.lower(),
                 "type": "boxpoints",
-                "value_label": endpoint,
+                "value_label": (
+                    row["y_label"]
+                    if row is not None and pd.notna(row["y_label"])
+                    else endpoint
+                ),
+                "title": (
+                    row["title"]
+                    if row is not None and pd.notna(row["title"])
+                    else None
+                ),
                 "x_order": [""],
                 "wide_to_long": {
                     "x_col": "measure",
@@ -152,6 +214,7 @@ def _auto_scatter_specs_from_correlations(
     fig_cfg: Dict[str, Any],
     assay: str,
     df_columns: List[str],
+    label_map=None,
 ) -> List[Dict[str, Any]]:
     auto = fig_cfg.get("auto_from_correlations", {}) or {}
     if not auto.get("enabled", False):
@@ -179,6 +242,13 @@ def _auto_scatter_specs_from_correlations(
         if missing:
             raise ValueError(f"[figures:auto_from_correlations] {assay}:{name} missing columns: {missing}")
 
+        x_lab = _label_for_axis(label_map, assay, x) or x
+        y_lab = _label_for_axis(label_map, assay, y) or y
+
+        x_title = _label_for_title(label_map, assay, x) or x
+        y_title = _label_for_title(label_map, assay, y) or y
+        auto_title = f"{y_title} vs {x_title}"
+
         out_specs.append(
             {
                 "name": f"scatter_{name}",
@@ -186,11 +256,13 @@ def _auto_scatter_specs_from_correlations(
                 "type": "scatter",
                 "x": x,
                 "y": y,
-                "x_label": x,
-                "y_label": y,
+                "x_label": x_lab,
+                "y_label": y_lab,
+                "title": auto_title,
                 "fit": {"enabled": fit_enabled, "by": "pooled"},
             }
         )
+
 
     return out_specs
 
@@ -243,7 +315,7 @@ def run_figures_from_config(
     require_columns(df, [mouse_id_col, group_col, sex_col])
 
     written: List[Path] = []
-
+    label_map = _load_label_map(config)
     # Start with manually defined specs
     specs = fig_cfg.get("specs", []) or []
     if not isinstance(specs, list):
@@ -255,13 +327,16 @@ def run_figures_from_config(
         fig_cfg=fig_cfg,
         assay=assay,
         df_columns=list(df.columns),
+        label_map=label_map,
     )
+
     # Add auto-generated scatter specs from correlations.specs
     auto_scatter_specs = _auto_scatter_specs_from_correlations(
         config=config,
         fig_cfg=fig_cfg,
         assay=assay,
         df_columns=list(df.columns),
+        label_map=label_map,
     )
 
     manual_names = {str(s.get("name")) for s in specs if isinstance(s, dict) and "name" in s}
@@ -361,7 +436,7 @@ def run_figures_from_config(
                 group_order=group_order,
                 sex_order=sex_order,
                 style=style_spec,
-                title=None,
+                title=spec.get("title", None),
                 y_label=value_label,
                 show=False,
                 anova_df=anova_df,
@@ -391,9 +466,11 @@ def run_figures_from_config(
                     sex_col=sex_col,
                     group_order=spec.get("group_order", defaults.get("group_order", None)),
                     sex_order=spec.get("sex_order", ["female", "male"]),
-                    x_label=spec.get("x_label", None),
-                    y_label=spec.get("y_label", None),
-                    title=spec.get("title", None),
+                    x_label=spec.get("x_label", None) or (_label_for_axis(label_map, assay, str(x)) or str(x)),
+                    y_label=spec.get("y_label", None) or (_label_for_axis(label_map, assay, str(y)) or str(y)),
+                    title=spec.get("title", None) or (
+                        f"{_label_for_title(label_map, assay, str(y)) or str(y)} vs {_label_for_title(label_map, assay, str(x)) or str(x)}"
+),
                     fit_enabled=fit_enabled,
                 )
 
