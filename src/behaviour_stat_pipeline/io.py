@@ -28,7 +28,14 @@ def extract_mouse_id(raw: str) -> str:
     raise ValueError(f"Could not extract mouse_id from raw identifier: {raw!r}")
 
 
-def load_subjects(subjects_csv: Union[str, Path]) -> pd.DataFrame:
+def load_subjects(
+    subjects_csv: Union[str, Path],
+    *,
+    allowed_groups: Optional[set[str]] = None,
+    strict_groups: bool = False,
+    allowed_sex: Optional[set[str]] = None,
+    strict_sex: bool = True,
+) -> pd.DataFrame:
     subjects = pd.read_csv(subjects_csv)
 
     required = {"mouse_id", "group", "sex"}
@@ -48,15 +55,26 @@ def load_subjects(subjects_csv: Union[str, Path]) -> pd.DataFrame:
     subjects["group"] = subjects["group"].astype(str).str.strip().str.lower()
     subjects["sex"] = subjects["sex"].astype(str).str.strip().str.lower()
 
-    allowed_groups = {"cup", "tail", "control", "stress"}
-    bad_groups = set(subjects["group"].unique()) - allowed_groups
-    if bad_groups:
-        raise ValueError(f"Unexpected group labels in subjects.csv: {sorted(bad_groups)}")
+    # ---- group validation (optional) ----
+    if allowed_groups is not None:
+        bad_groups = set(subjects["group"].unique()) - allowed_groups
+        if bad_groups:
+            msg = f"Unexpected group labels in subjects.csv: {sorted(bad_groups)}"
+            if strict_groups:
+                raise ValueError(msg)
+            else:
+                print(f"WARNING: {msg}")
 
-    allowed_sex = {"male", "female"}
+    # ---- sex validation (usually keep strict) ----
+    if allowed_sex is None:
+        allowed_sex = {"male", "female"}
     bad_sex = set(subjects["sex"].unique()) - allowed_sex
     if bad_sex:
-        raise ValueError(f"Unexpected sex labels in subjects.csv: {sorted(bad_sex)}")
+        msg = f"Unexpected sex labels in subjects.csv: {sorted(bad_sex)}"
+        if strict_sex:
+            raise ValueError(msg)
+        else:
+            print(f"WARNING: {msg}")
 
     return subjects
 

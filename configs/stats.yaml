@@ -8,6 +8,20 @@ paths:
   out_figures: outputs/figures
   out_logs: outputs/logs
 
+subjects:
+  normalize:
+    group: lower_strip
+    sex: lower_strip
+
+  groups:
+    enabled: true          # if false/omitted → accept any group labels
+    allowed: ["one", "two", "control", "stressed", "tail", "cup"]
+    strict: true           # if true → error; if false → warn
+
+  sex:
+    allowed: ["male", "female"]
+    strict: true  
+
 factors:
   group:
     column: group

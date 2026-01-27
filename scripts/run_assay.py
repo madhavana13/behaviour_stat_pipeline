@@ -4,7 +4,7 @@ import argparse
 from pathlib import Path
 
 import pandas as pd
-
+import yaml
 # Assay modules
 from behaviour_stat_pipeline.assays.vit import qc_vit, derive_vit_metrics, VITConfig, vit_missing_cells_report
 from behaviour_stat_pipeline.assays.oft import qc_oft, derive_oft_metrics, OFTConfig
@@ -18,6 +18,20 @@ from behaviour_stat_pipeline.common.derive import save_processed
 
 # Reuse ingestion logic
 from behaviour_stat_pipeline.io import load_subjects, load_tracking_csv, merge_subject_metadata
+
+def _subjects_validation_from_cfg(cfg: dict):
+    sub = cfg.get("subjects", {})
+
+    groups_cfg = sub.get("groups", {})
+    groups_enabled = bool(groups_cfg.get("enabled", False))
+    allowed_groups = set(map(str.lower, groups_cfg.get("allowed", []))) if groups_enabled else None
+    strict_groups = bool(groups_cfg.get("strict", False))
+
+    sex_cfg = sub.get("sex", {})
+    allowed_sex = set(map(str.lower, sex_cfg.get("allowed", ["male", "female"])))
+    strict_sex = bool(sex_cfg.get("strict", True))
+
+    return allowed_groups, strict_groups, allowed_sex, strict_sex
 
 
 def infer_vit_timepoint_phase_from_filename(p: Path) -> tuple[str, str]:
@@ -45,7 +59,15 @@ def run_vit(args: argparse.Namespace) -> None:
     if not files:
         raise FileNotFoundError(f"No files found under {root} matching {args.pattern}")
 
-    subjects = load_subjects(args.subjects)
+    allowed_groups, strict_groups, allowed_sex, strict_sex = _subjects_validation_from_cfg(getattr(args, "cfg", {}))
+
+    subjects = load_subjects(
+        args.subjects,
+        allowed_groups=allowed_groups,
+        strict_groups=strict_groups,
+        allowed_sex=allowed_sex,
+        strict_sex=strict_sex,
+    )
 
     dfs: list[pd.DataFrame] = []
     for f in files:
@@ -90,7 +112,15 @@ def run_oft(args: argparse.Namespace) -> None:
     if not files:
         raise FileNotFoundError(f"No files found under {root} matching {args.pattern}")
 
-    subjects = load_subjects(args.subjects)
+    allowed_groups, strict_groups, allowed_sex, strict_sex = _subjects_validation_from_cfg(getattr(args, "cfg", {}))
+
+    subjects = load_subjects(
+        args.subjects,
+        allowed_groups=allowed_groups,
+        strict_groups=strict_groups,
+        allowed_sex=allowed_sex,
+        strict_sex=strict_sex,
+    )
 
     dfs = []
     for f in files:
@@ -134,7 +164,15 @@ def run_epm(args: argparse.Namespace) -> None:
     if not files:
         raise FileNotFoundError(f"No files found under {root} matching {args.pattern}")
 
-    subjects = load_subjects(args.subjects)
+    allowed_groups, strict_groups, allowed_sex, strict_sex = _subjects_validation_from_cfg(getattr(args, "cfg", {}))
+
+    subjects = load_subjects(
+        args.subjects,
+        allowed_groups=allowed_groups,
+        strict_groups=strict_groups,
+        allowed_sex=allowed_sex,
+        strict_sex=strict_sex,
+    )
 
     dfs = []
     for f in files:
@@ -179,7 +217,15 @@ def run_nor(args: argparse.Namespace) -> None:
     if not test_files:
         raise FileNotFoundError(f"No TEST files found under {root} matching *TEST*_output_summary.csv")
 
-    subjects = load_subjects(args.subjects)
+    allowed_groups, strict_groups, allowed_sex, strict_sex = _subjects_validation_from_cfg(getattr(args, "cfg", {}))
+
+    subjects = load_subjects(
+        args.subjects,
+        allowed_groups=allowed_groups,
+        strict_groups=strict_groups,
+        allowed_sex=allowed_sex,
+        strict_sex=strict_sex,
+    )
 
     def _load(files: list[Path], session: str) -> pd.DataFrame:
         dfs = []
@@ -226,7 +272,15 @@ def run_lm(args: argparse.Namespace) -> None:
     if not files:
         raise FileNotFoundError(f"No files found under {root} matching {args.pattern}")
 
-    subjects = load_subjects(args.subjects)
+    allowed_groups, strict_groups, allowed_sex, strict_sex = _subjects_validation_from_cfg(getattr(args, "cfg", {}))
+
+    subjects = load_subjects(
+        args.subjects,
+        allowed_groups=allowed_groups,
+        strict_groups=strict_groups,
+        allowed_sex=allowed_sex,
+        strict_sex=strict_sex,
+    )
 
     dfs = []
     for f in files:
@@ -280,12 +334,20 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--subjects", default="data/metadata/subjects.csv", help="Path to subjects.csv")
     ap.add_argument("--raw_id_col", default="Unnamed: 0", help="Raw ID column in tracking CSV")
     ap.add_argument("--out", default="", help="Output processed CSV path")
+    ap.add_argument("--config", default="", help="Path to YAML config (optional)")
     return ap
 
 
 def main() -> None:
     ap = build_parser()
     args = ap.parse_args()
+
+    cfg = {}
+    if args.config:
+        with open(args.config, "r", encoding="utf-8") as f:
+            cfg = yaml.safe_load(f) or {}
+    args.cfg = cfg  # attach config dict to args
+
     ASSAY_RUNNERS[args.assay](args)
 
 

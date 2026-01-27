@@ -14,6 +14,7 @@ __pycache__/
 data/processed/
 data/interim/
 data/metadata/
+data/raw/
 
 # ---- Outputs ----
 outputs/
