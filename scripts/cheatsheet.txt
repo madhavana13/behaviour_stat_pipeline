@@ -1,30 +1,39 @@
 running assays:
 
-python scripts/run_assay.py --assay OFT --root ".\data\raw\oft"     
-python scripts/run_assay.py --assay VIT --root ".\data\raw\vit"    
-python scripts/run_assay.py --assay EPM --root ".\data\raw\epm"  
-python scripts/run_assay.py --assay NOR --root ".\data\raw\nor" 
-python scripts/run_assay.py --assay LM --root ".\data\raw\lm"         
+            python scripts/run_assay.py --assay OFT --root ".\data\raw\oft"     
+            python scripts/run_assay.py --assay VIT --root ".\data\raw\vit"    
+            python scripts/run_assay.py --assay EPM --root ".\data\raw\epm"  
+            python scripts/run_assay.py --assay NOR --root ".\data\raw\nor" 
+            python scripts/run_assay.py --assay LM --root ".\data\raw\lm"         
 
-python scripts/run_stats.py --config configs/stats.yaml --assays nor
+            python scripts/run_stats.py --config configs/stats.yaml --assays nor
 
 
 To create new files/folders:
 
-New-Item -ItemType Directory -Path src\behaviour_stat_pipeline\figures -Force | Out-Null
-New-Item -ItemType File -Path src\behaviour_stat_pipeline\figures\
-New-Item -ItemType Directory -Path scripts/derive_vit_processed.py
+            New-Item -ItemType Directory -Path src\behaviour_stat_pipeline\figures -Force | Out-Null
+            New-Item -ItemType File -Path src\behaviour_stat_pipeline\figures\
+            New-Item -ItemType Directory -Path scripts/derive_vit_processed.py
 
 
 For running all assays together:
 
-python scripts/run_stats.py --config configs/stats.yaml
-python scripts/run_figures.py --config configs/stats.yaml
+        python scripts/run_stats.py --config configs/stats.yaml
+        python scripts/run_figures.py --config configs/stats.yaml
 
-To delete outputs:
+To delete outputs (locally too):
 
-del .\outputs\figures\LM_*.png
+        del .\outputs\figures\LM_*.png
 
 TO find a string/function across files
 
-Get-ChildItem -Recurse -Filter *.py | Select-String "group_gap"
+        Get-ChildItem -Recurse -Filter *.py | Select-String "group_gap"
+
+Stop tracking files that were already added (important) .gitignore does not retroactively untrack files that Git already knows about. You must remove them from the index without deleting them locally.
+
+        git rm -r --cached outputs
+        git rm -r --cached data/processed
+
+prints all column names from all processed CSVs (header only, no full reads):
+
+Get-ChildItem data\processed\LM_processed.csv | ForEach-Object { Import-Csv $_ | Get-Member -MemberType NoteProperty | Select-Object -ExpandProperty Name } | Sort-Object -Unique

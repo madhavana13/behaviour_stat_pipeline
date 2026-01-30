@@ -98,7 +98,22 @@ diagnostics:
       - distance moved in center
       - time in corners
 
-    epm: []
+    epm: 
+      - count_head_dips
+      - count_psap
+      - distance_moved_in_center
+      - distance_moved_on_closed_arms
+      - distance_moved_on_open_arms
+      - time_head_dipping
+      - time_in_center
+      - time_on_closed_arms
+      - time_on_open_arms
+      - time_psap
+      - total_distance_moved
+      - total_time_in_arena
+      - transitions_into_center
+      - transitions_into_closed_arms
+      - transitions_into_open_arms
     vit:
       - "did__time in homecage"
       - "did__total distance moved"
@@ -119,7 +134,6 @@ diagnostics:
       - time_in_central_alley
       - time_in_narrow_alley
       - time_in_protected_alley
-
 
 secondary_two_way_anova:
   enabled: true
@@ -146,7 +160,22 @@ secondary_two_way_anova:
       - time in center
       - distance moved in center
       - time in corners
-    epm: []
+    epm: 
+      - count_head_dips
+      - count_psap
+      - distance_moved_in_center
+      - distance_moved_on_closed_arms
+      - distance_moved_on_open_arms
+      - time_head_dipping
+      - time_in_center
+      - time_on_closed_arms
+      - time_on_open_arms
+      - time_psap
+      - total_distance_moved
+      - total_time_in_arena
+      - transitions_into_center
+      - transitions_into_closed_arms
+      - transitions_into_open_arms
     vit: 
       - "did__time in homecage"
       - "did__total distance moved"
