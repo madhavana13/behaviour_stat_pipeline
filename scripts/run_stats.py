@@ -20,15 +20,13 @@ from behaviour_stat_pipeline.stats.common import (
     drop_single_level_factors,
     cell_counts,
 )
-from behaviour_stat_pipeline.stats.diagnostics import endpoint_diagnostics
+from behaviour_stat_pipeline.stats.diagnostics import endpoint_diagnostics, rout_diagnostics
 from behaviour_stat_pipeline.stats.endpoints.one_sample import run_one_sample_by_group
 from behaviour_stat_pipeline.stats.endpoints.two_way_anova import run_two_way_anova, _significance_label
 from behaviour_stat_pipeline.stats.endpoints.simple_effects import run_simple_effects, SimpleEffectsSpec
 from behaviour_stat_pipeline.stats.common import load_stats_config
 from behaviour_stat_pipeline.stats.corrections import adjust_pvalues
 from behaviour_stat_pipeline.stats.endpoints.correlations import run_correlations
-
-
 
 
 def write_text(path: Path, txt: str) -> None:
@@ -131,6 +129,21 @@ def main() -> None:
                     suffix = "_".join(grouping)
                     diag_df.to_csv(cfg.out_tables / f"{assay.upper()}_endpoint_diagnostics_by_{suffix}.csv", index=False)
                     flag_df.to_csv(cfg.out_tables / f"{assay.upper()}_flagged_points_madz_by_{suffix}.csv", index=False)
+                    rout_flag_df = rout_diagnostics(
+                        merged,
+                        assay=assay.upper(),
+                        endpoints=ep_list,
+                        group_cols=["group"],          # not used by ROUT, but API symmetry
+                        id_col=cfg.mouse_id_col,
+                        q=0.01,                       # Prism-like default; later we’ll config-drive this
+                        min_n=6,
+                        keep_all=False,
+                    )
+
+                    rout_flag_df.to_csv(
+                        cfg.out_tables / f"{assay.upper()}_flagged_points_rout_by_{suffix}.csv",
+                        index=False,
+                    )
 
         # --- Secondary/exploratory: two-way ANOVA (config-driven) ---
         if getattr(cfg, "secondary_two_way_anova_enabled", False):

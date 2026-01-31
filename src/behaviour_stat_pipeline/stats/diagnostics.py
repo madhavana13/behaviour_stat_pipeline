@@ -3,6 +3,8 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 from scipy import stats
+from typing import Optional
+from statsmodels.stats.multitest import fdrcorrection
 
 
 def _iqr(x: pd.Series) -> float:
@@ -22,6 +24,206 @@ def _cv(mean: float, sd: float) -> float:
     if mean is None or sd is None or np.isnan(mean) or np.isnan(sd) or mean == 0:
         return np.nan
     return float(sd / abs(mean))
+
+
+# statsmodels is used for robust regression; keep import inside function to avoid hard dependency at import time
+
+
+def rout_endpoint_flags(
+    x: pd.Series,
+    ids: Optional[pd.Series],
+    *,
+    assay: str,
+    endpoint: str,
+    q: float = 0.01,
+    min_n: int = 6,
+) -> pd.DataFrame:
+    """
+    ROUT-like outlier flagging (flag only; no exclusions).
+
+    Approach:
+      - Fit robust intercept-only model y = mu + e using statsmodels.RLM
+      - Compute (approx) studentized residuals
+      - Two-sided p-values from Normal approximation
+      - FDR correction at level q (Prism's ROUT 'Q')
+
+    Notes:
+      - This is conceptually similar to Prism ROUT, but Prism's exact internal implementation is closed-source.
+      - Output is flags only; downstream stats should NOT filter based on this.
+
+    Returns:
+      DataFrame with columns:
+        assay, endpoint, mouse_id (if provided), value, rout_resid, p_value, q, flagged
+    """
+    # coerce numeric
+    x = pd.to_numeric(x, errors="coerce")
+    mask = x.notna()
+
+    if mask.sum() < min_n:
+        return pd.DataFrame(columns=[
+            "assay", "endpoint", "mouse_id", "value",
+            "rout_resid", "p_value", "q", "flagged"
+        ])
+
+    y = x.loc[mask].to_numpy()
+    mouse_id = None
+    if ids is not None:
+        mouse_id = ids.loc[mask].astype(str).to_numpy()
+
+    # Robust intercept-only regression
+    try:
+        import statsmodels.api as sm
+    except ImportError as e:
+        raise ImportError(
+            "ROUT flagging requires statsmodels. Install with: pip install statsmodels"
+        ) from e
+
+    X = np.ones((y.shape[0], 1))  # intercept only
+    rlm = sm.RLM(y, X, M=sm.robust.norms.TukeyBiweight())
+    res = rlm.fit()
+
+    # Residual scale: use robust scale estimate if available; else fallback to sample sd
+    # statsmodels RLM exposes res.scale (robust estimate)
+    scale = float(getattr(res, "scale", np.std(res.resid, ddof=1)))
+    if not np.isfinite(scale) or scale <= 0:
+        scale = float(np.std(res.resid, ddof=1))
+    if not np.isfinite(scale) or scale <= 0:
+        # can't compute meaningful residual z
+        return pd.DataFrame(columns=[
+            "assay", "endpoint", "mouse_id", "value",
+            "rout_resid", "p_value", "q", "flagged"
+        ])
+
+    rout_z = res.resid / scale  # approx standardized residuals
+    prism_like_flag = np.abs(rout_z) > 3.5
+
+
+    # Two-sided p-values under Normal approx
+    dfree = max(int(y.shape[0] - 1), 1)   # intercept-only => p=1
+    pvals = 2.0 * (1.0 - stats.t.cdf(np.abs(rout_z), df=dfree))
+
+
+    # FDR correction at level q
+    rejected, qvals = fdrcorrection(pvals, alpha=q)
+
+
+    out = pd.DataFrame({
+        "assay": assay,
+        "endpoint": endpoint,
+        "value": y,
+        "robust_z": rout_z,
+        "p_value": pvals,
+        "q_value": qvals,
+        "q_fdr": float(q),
+        "flagged_fdr": rejected,
+        "flagged_prism": np.abs(rout_z) > 3.5,
+    })
+
+    if mouse_id is not None:
+        out.insert(2, "mouse_id", mouse_id)
+
+    return out
+
+
+def statsmodels_fdr(pvals: np.ndarray, *, alpha: float) -> tuple[np.ndarray, np.ndarray]:
+    """
+    FDR correction helper.
+    Returns:
+      rejected: boolean array
+      qvals: adjusted p-values
+    """
+    try:
+        from statsmodels.stats.multitest import fdrcorrection
+    except ImportError as e:
+        raise ImportError(
+            "FDR correction requires statsmodels. Install with: pip install statsmodels"
+        ) from e
+
+    rejected, qvals = fdrcorrection(pvals, alpha=alpha)
+    return rejected.astype(bool), qvals.astype(float)
+
+
+def rout_diagnostics(
+    df: pd.DataFrame,
+    assay: str,
+    endpoints: list[str],
+    *,
+    group_cols: list[str],
+    id_col: str = "mouse_id",
+    q: float = 0.01,
+    min_n: int = 6,
+    keep_all: bool = False,  # set True temporarily for debugging vs Prism
+) -> pd.DataFrame:
+    """
+    Run ROUT-like flagging for multiple endpoints.
+
+    Behavior:
+      - If group_cols is non-empty: run ROUT *within each group cell* (Prism-like when you run per column/group)
+      - Else: run ROUT pooled across all rows
+
+    Returns:
+      One long table with group columns included.
+      By default returns only flagged rows, unless keep_all=True.
+    """
+    rows: list[pd.DataFrame] = []
+
+    # Decide splits
+    if group_cols:
+        # groupby returns (key, subdf); key can be scalar or tuple
+        grouped = df.groupby(group_cols, dropna=False, observed=False)
+        groups_iter = list(grouped)
+    else:
+        groups_iter = [(None, df)]
+
+    for ep in endpoints:
+        if ep not in df.columns:
+            continue
+
+        for key, sub in groups_iter:
+            ids = sub[id_col] if id_col in sub.columns else None
+
+            flags = rout_endpoint_flags(
+                sub[ep],
+                ids,
+                assay=assay,
+                endpoint=ep,
+                q=q,
+                min_n=min_n,
+            )
+            if flags.empty:
+                continue
+
+            # Attach group labels for traceability
+            if group_cols:
+                if not isinstance(key, tuple):
+                    key = (key,)
+                for col, val in zip(group_cols, key):
+                    flags[col] = val
+
+            flags = flags.loc[
+                flags["flagged_fdr"] | flags["flagged_prism"]
+            ].copy()
+
+            if flags.empty:
+                continue
+
+            if not flags.empty:
+                rows.append(flags)
+
+    if rows:
+        out = pd.concat(rows, ignore_index=True)
+
+        # Nice column order
+        front = ["assay", "endpoint"]
+        if group_cols:
+            front += group_cols
+        if "mouse_id" in out.columns:
+            front += ["mouse_id"]
+        rest = [c for c in out.columns if c not in front]
+        return out[front + rest]
+
+    base_cols = ["assay", "endpoint"] + (group_cols or []) + ["mouse_id", "value", "rout_resid", "p_value", "q", "flagged"]
+    return pd.DataFrame(columns=base_cols)
 
 
 def endpoint_diagnostics(

@@ -123,6 +123,9 @@ Different measures naturally behave differently.
 
 Deviations from these expectations warrant closer inspection.
 
+## Outlier handling
+
+Outliers were not excluded automatically. Instead, multiple complementary diagnostic procedures were applied. Extreme observations were identified descriptively using median absolute deviation (MAD)–based robust z-scores, with |z| > 3.5 considered extreme following standard recommendations in robust statistics. In addition, a ROUT-style procedure based on robust regression and false discovery rate (FDR) control (Q = 1%) was implemented to identify observations surviving multiplicity correction. Finally, a Prism-heuristic diagnostic flag based on large robust regression residuals (|z| > 3.5) was computed for transparency and software comparability. All diagnostic flags were reported without automatic data exclusion; any exclusions were based solely on documented protocol deviations.
 ---
 
 ## 8. Reporting template
