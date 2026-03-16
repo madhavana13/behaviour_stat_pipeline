@@ -246,10 +246,11 @@ def plot_group_boxpoints(
     for g in g_levels:
         block_positions = [positions[(g, x)] for x in x_levels]
         center = float(np.mean(block_positions))
+        label = "IFS" if str(g).lower() == "ifs" else str(g).capitalize()
         ax.text(
             center,
             -0.12,  # below the axis; adjust if you want
-            str(g).capitalize(),
+            label,
             ha="center",
             va="top",
             fontsize=10,

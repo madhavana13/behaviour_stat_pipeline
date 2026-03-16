@@ -37,3 +37,8 @@ Stop tracking files that were already added (important) .gitignore does not retr
 prints all column names from all processed CSVs (header only, no full reads):
 
 Get-ChildItem data\processed\LM_processed.csv | ForEach-Object { Import-Csv $_ | Get-Member -MemberType NoteProperty | Select-Object -ExpandProperty Name } | Sort-Object -Unique
+
+Get-ChildItem data\processed\EPM_processed.csv | ForEach-Object { Import-Csv $_ | Get-Member -MemberType NoteProperty | Select-Object -ExpandProperty Name } | Sort-Object -Unique
+Get-ChildItem data\processed\NOR_processed.csv | ForEach-Object { Import-Csv $_ | Get-Member -MemberType NoteProperty | Select-Object -ExpandProperty Name } | Sort-Object -Unique
+Get-ChildItem data\processed\OFT_processed.csv | ForEach-Object { Import-Csv $_ | Get-Member -MemberType NoteProperty | Select-Object -ExpandProperty Name } | Sort-Object -Unique
+Get-ChildItem data\processed\VIT_processed.csv | ForEach-Object { Import-Csv $_ | Get-Member -MemberType NoteProperty | Select-Object -ExpandProperty Name } | Sort-Object -Unique
