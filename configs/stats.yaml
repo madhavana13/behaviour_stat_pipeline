@@ -90,8 +90,8 @@ diagnostics:
       - test_novel_iz_time
       - di_explore
       - di_iz
-      - fam_total distance moved
-      - test_total distance moved
+      - fam_total_distance_moved
+      - test_total_distance_moved
     oft:
       - total_distance_moved
       - time_in_center
@@ -161,8 +161,8 @@ secondary_two_way_anova:
       - test_novel_iz_time
       - di_explore
       - di_iz
-      - fam_total distance moved
-      - test_total distance moved
+      - fam_total_distance_moved
+      - test_total_distance_moved
     oft:
       - total_distance_moved
       - time_in_center
@@ -193,9 +193,9 @@ secondary_two_way_anova:
       - transitions_into_open_arms
     vit: 
       - delta_after_minus_before__standing__is_hand
-      - delta_after_minus_before__hand__time in in right lower quadrant
-      - hand__Before__time in in right lower quadrant
-      - hand__After__time in in right lower quadrant
+      - delta_after_minus_before__hand__time in right lower quadrant
+      - hand__Before__time in right lower quadrant
+      - hand__After__time in right lower quadrant
       - standing__Before__distance moved in left lower quadrant
       - standing__Before__distance moved in left upper quadrant
       - standing__Before__distance moved in right lower quadrant
@@ -262,7 +262,7 @@ correlations:
   # minimal per-spec definitions
   specs:
     - assay: nor
-      x: "test_total distance moved"
+      x: "test_total_distance_moved"
       y: "test_novel_explore_time"
 
     - assay: nor
@@ -273,10 +273,6 @@ correlations:
       x: "total_distance_moved"
       y: "time_in_center"
 
-    - assay: vit
-      x: "did__total distance moved"
-      y: "delta_after_minus_before__hand__total distance moved"
-
     - assay: lm
       x: "latency_to_enter_narrow_alley" 
       y: "time_in_narrow_alley" 
@@ -284,6 +280,7 @@ correlations:
       method: pearson        # optional override
       groupings:
         - []                 # optional override (pooled only)
+        
 
 figures:
   enabled: true
@@ -294,7 +291,7 @@ figures:
     enabled: true
     source: "secondary_two_way_anova"
     exclude:
-      - "test_total distance moved"   # already manually specified below
+      - "test_total_distance_moved"   # already manually specified below
       - "test_familiar_iz_time"       # already shown in nor_test_object_times
       - "test_novel_iz_time"          # already shown in nor_test_object_times
 
@@ -364,7 +361,7 @@ figures:
     formats: ["png"]
 
   specs:
-    - name: "nor_test_object_times"
+    - name: "Time with objects"
       assay: "nor"
       type: "boxpoints"
       value_label: "Time with objects (s)"
@@ -376,7 +373,7 @@ figures:
           Familiar: "test_familiar_iz_time"
           Novel: "test_novel_iz_time"
 
-    - name: "test_total distance moved"
+    - name: "test_total_distance_moved"
       assay: "nor"
       type: "boxpoints"
       x_gap: 0.8
@@ -386,7 +383,7 @@ figures:
       wide_to_long:
         x_col: "measure"
         mapping:
-          Total: "test_total distance moved"
+          Total: "test_total_distance_moved"
 
     - name: "Time in Alleys"
       assay: "lm"
@@ -401,6 +398,19 @@ figures:
           Protected: "lm_time_protected_s"
           Centre: "lm_time_center_s"
           Narrow: "lm_time_narrow_s"          
+    
+    - name: "Time spent with hand in right lower quadrant"
+      assay: "vit"
+      type: "boxpoints"
+      x_gap: 0.8
+      value_label: "Time (s)"
+      x_order: ["Before", "After"]
+      group_order: ["control", "ifs"]
+      wide_to_long:
+        x_col: "timepoint"
+        mapping:
+          Before: "hand__Before__time in right lower quadrant"
+          After: "hand__After__time in right lower quadrant"
 
   auto_from_correlations:
     enabled: true

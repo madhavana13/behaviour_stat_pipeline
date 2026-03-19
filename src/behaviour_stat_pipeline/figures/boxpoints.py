@@ -307,7 +307,8 @@ def plot_group_boxpoints(
     ax.spines["left"].set_linewidth(2)
     ax.spines["bottom"].set_linewidth(2)
     ax.tick_params(width=1)
-    ax.set_ylim(bottom=0)
+    ymax = d[value_col].max()
+    ax.set_ylim(0, ymax * 1.15) 
 
     fig.tight_layout(rect=[0, 0, 1, 0.92])
 

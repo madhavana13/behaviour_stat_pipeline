@@ -39,15 +39,15 @@ FamiliarType = Literal["flask", "lego_tower"]
 
 
 # Canonical column names in your exports
-FAM_EXPLORE_FLASK = ["time exploring flask_0", "time exploring flask_1"]
-FAM_EXPLORE_TOWER = ["time exploring lego_tower_0", "time exploring lego_tower_1"]
-FAM_IZ_FLASK = ["time in interaction zone of flask_0", "time in interaction zone of flask_1"]
-FAM_IZ_TOWER = ["time in interaction zone of lego_tower_0", "time in interaction zone of lego_tower_1"]
+FAM_EXPLORE_FLASK = ["time_exploring_flask_0", "time_exploring_flask_1"]
+FAM_EXPLORE_TOWER = ["time_exploring_lego_tower_0", "time_exploring_lego_tower_1"]
+FAM_IZ_FLASK = ["time_in_interaction_zone_of_flask_0", "time_in_interaction_zone_of_flask_1"]
+FAM_IZ_TOWER = ["time_in_interaction_zone_of_lego_tower_0", "time_in_interaction_zone_of_lego_tower_1"]
 
-TEST_EXPLORE_FLASK = "time exploring flask_0"
-TEST_EXPLORE_TOWER = "time exploring lego_tower_0"
-TEST_IZ_FLASK = "time in interaction zone of flask_0"
-TEST_IZ_TOWER = "time in interaction zone of lego_tower_0"
+TEST_EXPLORE_FLASK = "time_exploring_flask_0"
+TEST_EXPLORE_TOWER = "time_exploring_lego_tower_0"
+TEST_IZ_FLASK = "time_in_interaction_zone_of_flask_0"
+TEST_IZ_TOWER = "time_in_interaction_zone_of_lego_tower_0"
 
 
 REQUIRED_ID_COLS = {"mouse_id", "group", "sex", "timepoint"}
