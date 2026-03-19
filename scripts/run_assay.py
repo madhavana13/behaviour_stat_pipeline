@@ -1,334 +1,19 @@
-# src/behaviour_stat_pipeline/run_assay.py
-
 import argparse
 from pathlib import Path
 
-import pandas as pd
 import yaml
-# Assay modules
-from behaviour_stat_pipeline.assays.vit import qc_vit, derive_vit_metrics, VITConfig, vit_missing_cells_report
-from behaviour_stat_pipeline.assays.oft import qc_oft, derive_oft_metrics, OFTConfig
-from behaviour_stat_pipeline.assays.epm import qc_epm, derive_epm_metrics, EPMConfig
-from behaviour_stat_pipeline.common.qc import warn_missing_subjects_coverage
-from behaviour_stat_pipeline.assays.nor import derive_nor_metrics, NORConfig, summarize_nor_sanity
-from behaviour_stat_pipeline.assays.lm import qc_lm, derive_lm_metrics, LMConfig
-from behaviour_stat_pipeline.common.derive import save_processed
 
-
-
-# Reuse ingestion logic
-from behaviour_stat_pipeline.io import load_subjects, load_tracking_csv, merge_subject_metadata
-
-def _subjects_validation_from_cfg(cfg: dict):
-    sub = cfg.get("subjects", {})
-
-    groups_cfg = sub.get("groups", {})
-    groups_enabled = bool(groups_cfg.get("enabled", False))
-    allowed_groups = set(map(str.lower, groups_cfg.get("allowed", []))) if groups_enabled else None
-    strict_groups = bool(groups_cfg.get("strict", False))
-
-    sex_cfg = sub.get("sex", {})
-    allowed_sex = set(map(str.lower, sex_cfg.get("allowed", ["male", "female"])))
-    strict_sex = bool(sex_cfg.get("strict", True))
-
-    return allowed_groups, strict_groups, allowed_sex, strict_sex
-
-
-def infer_vit_timepoint_phase_from_filename(p: Path) -> tuple[str, str]:
-    name = p.name.lower()
-    if "first_min" in name:
-        timepoint = "Before"
-    elif "second_min" in name:
-        timepoint = "After"
-    else:
-        raise ValueError(f"Cannot infer VIT timepoint from filename: {p.name}")
-
-    if "hand" in name:
-        phase = "hand"
-    elif "standing" in name:
-        phase = "standing"
-    else:
-        raise ValueError(f"Cannot infer VIT phase from filename: {p.name}")
-
-    return timepoint, phase
-
-
-def run_vit(args: argparse.Namespace) -> None:
-    root = Path(args.root)
-    files = sorted(root.rglob(args.pattern))
-    if not files:
-        raise FileNotFoundError(f"No files found under {root} matching {args.pattern}")
-
-    allowed_groups, strict_groups, allowed_sex, strict_sex = _subjects_validation_from_cfg(getattr(args, "cfg", {}))
-
-    subjects = load_subjects(
-        args.subjects,
-        allowed_groups=allowed_groups,
-        strict_groups=strict_groups,
-        allowed_sex=allowed_sex,
-        strict_sex=strict_sex,
-    )
-
-    dfs: list[pd.DataFrame] = []
-    for f in files:
-        df = load_tracking_csv(f, raw_id_col=args.raw_id_col)
-        df = merge_subject_metadata(df, subjects, on_missing_subjects="warn_drop")
-
-        df["assay"] = "VIT"
-        df["source_file"] = str(f)
-
-        tp, ph = infer_vit_timepoint_phase_from_filename(f)
-        df["timepoint"] = tp
-        df["phase"] = ph
-
-        dfs.append(df)
-
-    vit_long = pd.concat(dfs, ignore_index=True)
-    completeness_msg = vit_missing_cells_report(vit_long)
-    coverage_msg = warn_missing_subjects_coverage(vit_long["mouse_id"], subjects, where="VIT")
-
-    # QC + derive
-    qc_vit(vit_long)
-    vit_processed = derive_vit_metrics(vit_long, cfg=VITConfig())
-
-    out_path = Path(args.out) if args.out else Path("data/processed/VIT_processed.csv")
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    extra_lines = [m for m in [coverage_msg, completeness_msg] if m]
-
-    res = save_processed(
-        vit_processed,
-        out_csv=out_path,
-        assay="VIT",
-        files_n=len(files),
-        extra_lines=extra_lines,
-    )
-    print(f"Saved: {res.out_csv}")
-    print(f"Summary: {res.out_summary}")
-
-
-def run_oft(args: argparse.Namespace) -> None:
-    root = Path(args.root)
-    files = sorted(root.rglob(args.pattern))
-    if not files:
-        raise FileNotFoundError(f"No files found under {root} matching {args.pattern}")
-
-    allowed_groups, strict_groups, allowed_sex, strict_sex = _subjects_validation_from_cfg(getattr(args, "cfg", {}))
-
-    subjects = load_subjects(
-        args.subjects,
-        allowed_groups=allowed_groups,
-        strict_groups=strict_groups,
-        allowed_sex=allowed_sex,
-        strict_sex=strict_sex,
-    )
-
-    dfs = []
-    for f in files:
-        df = load_tracking_csv(f, raw_id_col=args.raw_id_col)
-        df = merge_subject_metadata(df, subjects, on_missing_subjects="warn_drop")
-
-        df["assay"] = "OFT"
-        df["source_file"] = str(f)
-
-        # OFT/EPM do not encode timepoint in filename; treat this run as one session.
-        df["timepoint"] = "Single"
-
-        dfs.append(df)
-
-    oft_long = pd.concat(dfs, ignore_index=True)
-    from behaviour_stat_pipeline.common.qc import warn_missing_subjects_coverage
-    coverage_msg = warn_missing_subjects_coverage(oft_long["mouse_id"], subjects, where="OFT")
-
-    # QC + derive
-    qc_oft(oft_long)
-    oft_processed = derive_oft_metrics(oft_long, cfg=OFTConfig())
-
-    out_path = Path(args.out) if args.out else Path("data/processed/OFT_processed.csv")
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    extra_lines = [coverage_msg] if coverage_msg else []
-
-    res = save_processed(
-        oft_processed,
-        out_csv=out_path,
-        assay="OFT",
-        files_n=len(files),
-        extra_lines=extra_lines,
-    )
-    print(f"Saved: {res.out_csv}")
-    print(f"Summary: {res.out_summary}")
-
-
-def run_epm(args: argparse.Namespace) -> None:
-    root = Path(args.root)
-    files = sorted(root.rglob(args.pattern))
-    if not files:
-        raise FileNotFoundError(f"No files found under {root} matching {args.pattern}")
-
-    allowed_groups, strict_groups, allowed_sex, strict_sex = _subjects_validation_from_cfg(getattr(args, "cfg", {}))
-
-    subjects = load_subjects(
-        args.subjects,
-        allowed_groups=allowed_groups,
-        strict_groups=strict_groups,
-        allowed_sex=allowed_sex,
-        strict_sex=strict_sex,
-    )
-
-    dfs = []
-    for f in files:
-        df = load_tracking_csv(f, raw_id_col=args.raw_id_col)
-        df = merge_subject_metadata(df, subjects, on_missing_subjects="warn_drop")
-
-        df["assay"] = "EPM"
-        df["source_file"] = str(f)
-        df["timepoint"] = "Single"  # session label for now
-
-        dfs.append(df)
-
-    epm_long = pd.concat(dfs, ignore_index=True)
-    from behaviour_stat_pipeline.common.qc import warn_missing_subjects_coverage
-    coverage_msg = warn_missing_subjects_coverage(epm_long["mouse_id"], subjects, where="EPM")
-
-    qc_epm(epm_long)
-    epm_processed = derive_epm_metrics(epm_long, cfg=EPMConfig())
-
-    out_path = Path(args.out) if args.out else Path("data/processed/EPM_processed.csv")
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    extra = [coverage_msg] if coverage_msg else []
-    res = save_processed(
-        epm_processed,
-        out_csv=out_path,
-        assay="EPM",  # or OFT/EPM
-        files_n=len(files),
-        extra_lines=extra,
-    )
-    print(f"Saved: {res.out_csv}")
-    print(f"Summary: {res.out_summary}")
-
-
-def run_nor(args: argparse.Namespace) -> None:
-    root = Path(args.root)
-
-    fam_files = sorted(root.rglob("*FAM*_output_summary.csv"))
-    test_files = sorted(root.rglob("*TEST*_output_summary.csv"))
-
-    if not fam_files:
-        raise FileNotFoundError(f"No FAM files found under {root} matching *FAM*_output_summary.csv")
-    if not test_files:
-        raise FileNotFoundError(f"No TEST files found under {root} matching *TEST*_output_summary.csv")
-
-    allowed_groups, strict_groups, allowed_sex, strict_sex = _subjects_validation_from_cfg(getattr(args, "cfg", {}))
-
-    subjects = load_subjects(
-        args.subjects,
-        allowed_groups=allowed_groups,
-        strict_groups=strict_groups,
-        allowed_sex=allowed_sex,
-        strict_sex=strict_sex,
-    )
-
-    def _load(files: list[Path], session: str) -> pd.DataFrame:
-        dfs = []
-        for f in files:
-            df = load_tracking_csv(f, raw_id_col=args.raw_id_col)
-            df = merge_subject_metadata(df, subjects, on_missing_subjects="warn_drop")
-
-            df["assay"] = "NOR"
-            df["source_file"] = str(f)
-            df["timepoint"] = "Single"   # per your current plan: analyze sessions separately across runs
-            df["session"] = session
-
-            dfs.append(df)
-        out = pd.concat(dfs, ignore_index=True)
-        coverage_msg = warn_missing_subjects_coverage(out["mouse_id"], subjects, where=f"NOR {session}")
-        return out, coverage_msg
-
-    fam, coverage_fam_msg = _load(fam_files, "FAM")
-    test, coverage_test_msg = _load(test_files, "TEST")
-
-    nor_processed = derive_nor_metrics(fam, test, cfg=NORConfig())
-    print(summarize_nor_sanity(nor_processed, min_total_s=20.0))
-
-    out_path = Path(args.out) if args.out else Path("data/processed/NOR_processed.csv")
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-
-    sanity = summarize_nor_sanity(nor_processed, min_total_s=20.0)
-    extra_lines = [m for m in [coverage_fam_msg, coverage_test_msg, sanity] if m]
-
-    res = save_processed(
-        nor_processed,
-        out_csv=out_path,
-        assay="NOR",
-        files_n=len(fam_files) + len(test_files),
-        extra_lines=extra_lines,
-    )
-
-    print(f"Saved: {res.out_csv}")
-    print(f"Summary: {res.out_summary}")
-
-def run_lm(args: argparse.Namespace) -> None:
-    root = Path(args.root)
-    files = sorted(root.rglob(args.pattern))
-    if not files:
-        raise FileNotFoundError(f"No files found under {root} matching {args.pattern}")
-
-    allowed_groups, strict_groups, allowed_sex, strict_sex = _subjects_validation_from_cfg(getattr(args, "cfg", {}))
-
-    subjects = load_subjects(
-        args.subjects,
-        allowed_groups=allowed_groups,
-        strict_groups=strict_groups,
-        allowed_sex=allowed_sex,
-        strict_sex=strict_sex,
-    )
-
-    dfs = []
-    for f in files:
-        df = load_tracking_csv(f, raw_id_col=args.raw_id_col)
-        df = merge_subject_metadata(df, subjects, on_missing_subjects="warn_drop")
-
-        df["assay"] = "LM"
-        df["source_file"] = str(f)
-
-        # OFT/EPM do not encode timepoint in filename; treat this run as one session.
-        df["timepoint"] = "Single"
-
-        dfs.append(df)
-
-    lm_long = pd.concat(dfs, ignore_index=True)
-    from behaviour_stat_pipeline.common.qc import warn_missing_subjects_coverage
-    coverage_msg = warn_missing_subjects_coverage(lm_long["mouse_id"], subjects, where="LM")
-
-    # QC + derive
-    qc_lm(lm_long)
-    lm_processed = derive_lm_metrics(lm_long, cfg=LMConfig())
-
-    out_path = Path(args.out) if args.out else Path("data/processed/LM_processed.csv")
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    extra_lines = [coverage_msg] if coverage_msg else []
-
-    res = save_processed(
-        lm_processed,
-        out_csv=out_path,
-        assay="LM",
-        files_n=len(files),
-        extra_lines=extra_lines,
-    )
-    print(f"Saved: {res.out_csv}")
-    print(f"Summary: {res.out_summary}")
-
-ASSAY_RUNNERS = {
-    "VIT": run_vit, 
-    "OFT": run_oft,
-    "EPM": run_epm,
-    "NOR": run_nor,
-    "LM": run_lm,
-}
+from behaviour_stat_pipeline.assays.registry import RUNNER_REGISTRY, RunContext
 
 
 def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--assay", required=True, choices=sorted(ASSAY_RUNNERS.keys()), help="Which assay pipeline to run")
+    ap.add_argument(
+        "--assay",
+        required=True,
+        choices=sorted(RUNNER_REGISTRY.keys()),
+        help="Which assay pipeline to run",
+    )
     ap.add_argument("--root", required=True, help="Root folder containing raw CSV outputs")
     ap.add_argument("--pattern", default="*_output_summary.csv", help="Glob pattern for raw CSVs")
     ap.add_argument("--subjects", default="data/metadata/subjects.csv", help="Path to subjects.csv")
@@ -346,9 +31,17 @@ def main() -> None:
     if args.config:
         with open(args.config, "r", encoding="utf-8") as f:
             cfg = yaml.safe_load(f) or {}
-    args.cfg = cfg  # attach config dict to args
 
-    ASSAY_RUNNERS[args.assay](args)
+    ctx = RunContext(
+        root=Path(args.root),
+        pattern=args.pattern,
+        subjects_path=args.subjects,
+        raw_id_col=args.raw_id_col,
+        out=args.out,
+        cfg=cfg,
+    )
+
+    RUNNER_REGISTRY[args.assay].run(ctx)
 
 
 if __name__ == "__main__":
