@@ -1,37 +1,47 @@
-# Raw data (keep local)
-data/raw/
-data/metadata/*.xlsx
-
-
-# Python junk
+# -------------------------
+# Python artifacts
+# -------------------------
 __pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
 .ipynb_checkpoints/
-*.pyc
 .venv/
 
+# -------------------------
+# IDE
+# -------------------------
+.vscode/
 
-# ---- Data ----
-data/processed/
-data/interim/
-data/metadata/
+# -------------------------
+# Data (do NOT track large/generated data)
+# -------------------------
 data/raw/
+data/interim/
+data/processed/
 
-# ---- Outputs ----
+# BUT keep metadata + configs
+!data/metadata/*.csv
+!configs/*.csv
+
+# -------------------------
+# Outputs (always generated)
+# -------------------------
 outputs/
-outputs/**
-__pycache__/
-.pytest_cache/
-*.pyc
-src/*.egg-info/
 
-# ---- Logs ----
+# -------------------------
+# Logs
+# -------------------------
 *.log
-*.txt
 
-# ---- Figures ----
+# -------------------------
+# Figures (generated)
+# -------------------------
 *.png
 *.pdf
 *.svg
 
-# ---- Tables ----
-*.csv
+# -------------------------
+# Tables (generated ONLY in outputs/)
+# -------------------------
+outputs/**/*.csv

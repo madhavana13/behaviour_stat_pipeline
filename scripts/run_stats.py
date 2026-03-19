@@ -1,8 +1,10 @@
 from __future__ import annotations
+from dataclasses import replace
 
 import argparse
 from pathlib import Path
 import textwrap
+import yaml
 
 import pandas as pd
 
@@ -44,7 +46,15 @@ def write_text(path: Path, txt: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(txt, encoding="utf-8")
 
-
+def load_yaml(path: str) -> dict:
+    if not path:
+        return {}
+    with open(path, "r", encoding="utf-8") as f:
+        return yaml.safe_load(f) or {}
+    
+def log_written(path: Path) -> None:
+    print(f"Wrote: {path}")
+    
 # -------------------------
 # Core pipeline stages
 # -------------------------
@@ -146,7 +156,9 @@ def run_anova(df: pd.DataFrame, cfg, assay: str) -> pd.DataFrame | None:
 
     aov["significance_label"] = aov["p_adj"].apply(_significance_label)
 
-    aov.to_csv(cfg.out_tables / f"{assay.upper()}_secondary_two_way_anova.csv", index=False)
+    out_path = cfg.out_tables / f"{assay.upper()}_secondary_two_way_anova.csv"
+    aov.to_csv(out_path, index=False)
+    log_written(out_path)
 
     return aov
 
@@ -168,6 +180,9 @@ def run_posthoc(df: pd.DataFrame, cfg, assay: str) -> None:
     )
 
     df_posthoc.to_csv(cfg.out_tables / f"{assay.upper()}_secondary_posthoc_cellmeans.csv", index=False)
+    out_path = cfg.out_tables / f"{assay.upper()}_secondary_posthoc_cellmeans.csv"
+    df_posthoc.to_csv(out_path, index=False)
+    log_written(out_path)
 
 
 def run_diagnostics(df: pd.DataFrame, cfg, assay: str) -> None:
@@ -205,19 +220,22 @@ def run_diagnostics(df: pd.DataFrame, cfg, assay: str) -> None:
         )
 
         rout_df.to_csv(cfg.out_tables / f"{assay.upper()}_flagged_points_rout_by_{suffix}.csv", index=False)
-
+        log_written(cfg.out_tables / f"{assay.upper()}_endpoint_diagnostics_by_{suffix}.csv")
+        log_written(cfg.out_tables / f"{assay.upper()}_flagged_points_madz_by_{suffix}.csv")
+        log_written(cfg.out_tables / f"{assay.upper()}_flagged_points_rout_by_{suffix}.csv")
 
 def run_exploratory(df: pd.DataFrame, cfg, assay: str) -> None:
     if not cfg.correlations_enabled:
         return
 
+    out_path = cfg.out_tables / f"{assay.upper()}_correlations.csv"
     run_correlations(
         assay=assay,
         df=df,
         cfg=cfg.__dict__,
-        out_csv_path=str(cfg.out_tables / f"{assay.upper()}_correlations.csv"),
+        out_csv_path=str(out_path),
     )
-
+    log_written(out_path)
 
 def write_summary(df: pd.DataFrame, cfg, assay: str) -> None:
     between = cfg.between_factors
@@ -250,15 +268,29 @@ def write_summary(df: pd.DataFrame, cfg, assay: str) -> None:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", required=True)
+    ap.add_argument("--experiment-config", default="", help="Path to experiment YAML config")
     ap.add_argument("--assays", nargs="*", default=None)
     args = ap.parse_args()
 
     cfg = load_stats_config(args.config)
+    exp_cfg = load_yaml(args.experiment_config)
 
-    assays = cfg.assays if args.assays is None else args.assays
+    exp_paths = exp_cfg.get("paths", {})
+
+    cfg = replace(
+        cfg,
+        processed_dir=Path(exp_paths.get("processed_dir", cfg.processed_dir)),
+        subjects_path=Path(exp_paths.get("metadata_subjects", cfg.subjects_path)),
+        out_tables=Path(exp_paths.get("out_tables", cfg.out_tables)),
+        out_logs=Path(exp_paths.get("out_logs", cfg.out_logs)),
+        out_figures=Path(exp_paths.get("out_figures", cfg.out_figures)),
+    )
+
+    assays = cfg.assays if args.assays is None else [a.lower() for a in args.assays]
 
     cfg.out_tables.mkdir(parents=True, exist_ok=True)
     cfg.out_logs.mkdir(parents=True, exist_ok=True)
+    cfg.out_figures.mkdir(parents=True, exist_ok=True)
 
     subjects = read_subjects(cfg.subjects_path)
 

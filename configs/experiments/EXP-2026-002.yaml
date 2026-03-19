@@ -1,0 +1,24 @@
+experiment:
+  id: EXP-2026-002
+
+paths:
+  metadata_subjects: data/experiments/EXP-2026-002/metadata/subjects.csv
+  processed_dir: data/experiments/EXP-2026-002/processed
+  interim_dir: data/experiments/EXP-2026-002/interim
+  out_tables: outputs/EXP-2026-002/tables
+  out_figures: outputs/EXP-2026-002/figures
+  out_logs: outputs/EXP-2026-002/logs
+
+raw:
+  vit: data/experiments/EXP-2026-002/raw/vit
+  nor: data/experiments/EXP-2026-002/raw/nor
+  oft: data/experiments/EXP-2026-002/raw/oft
+  epm: data/experiments/EXP-2026-002/raw/epm
+  lm: data/experiments/EXP-2026-002/raw/lm
+
+assay_patterns:
+  vit: "*_output_summary.csv"
+  oft: "*_output_summary.csv"
+  epm: "*_output_summary.csv"
+  lm: "*_output_summary.csv"
+  nor: "*_output_summary.csv"

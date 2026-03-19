@@ -1,0 +1,65 @@
+assay,endpoint,title,y_label
+LM,distance_moved_in_central_alley,Distance moved in central alley,Distance (m)
+LM,distance_moved_in_narrow_alley,Distance moved in narrow alley,Distance (m)
+LM,distance_moved_in_protected_alley,Distance moved in protected alley,Distance (m)
+
+LM,latency_to_enter_narrow_alley,Latency to enter narrow alley,Latency (s)
+LM,latency_to_enter_protected_alley,Latency to enter protected alley,Latency (s)
+LM,latency_to_re_enter_narrow_alley,Latency to re-enter narrow alley,Latency (s)
+LM,latency_to_re_enter_protected_alley,Latency to re-enter protected alley,Latency (s)
+
+LM,transitions_into_central_alley,Transitions into central alley,Number of transitions (n)
+LM,transitions_into_narrow_alley,Transitions into narrow alley,Number of transitions (n)
+LM,transitions_into_protected_alley,Transitions into protected alley,Number of transitions (n)
+
+LM,time_in_central_alley,Time in central alley,Time (s)
+LM,time_in_narrow_alley,Time in narrow alley,Time (s)
+LM,time_in_protected_alley,Time in protected alley,Time (s)
+EPM,count_head_dips,Number of head dips,Count
+EPM,count_psap,Number of PSAP events,Count
+
+EPM,distance_moved_in_center,Distance moved in center,Distance (m)
+EPM,distance_moved_on_closed_arms,Distance moved on closed arms,Distance (m)
+EPM,distance_moved_on_open_arms,Distance moved on open arms,Distance (m)
+
+EPM,time_head_dipping,Time spent head dipping,Time (s)
+EPM,time_in_center,Time spent in center,Time (s)
+EPM,time_on_closed_arms,Time spent on closed arms,Time (s)
+EPM,time_on_open_arms,Time spent on open arms,Time (s)
+EPM,time_psap,Time spent in PSAP,Time (s)
+
+EPM,total_distance_moved,Total distance moved,Distance (m)
+EPM,total_time_in_arena,Total time in arena,Time (s)
+
+EPM,transitions_into_center,Transitions into center,Number of transitions
+EPM,transitions_into_closed_arms,Transitions into closed arms,Number of transitions
+EPM,transitions_into_open_arms,Transitions into open arms,Number of transitions
+
+NOR,fam_total distance moved,Distance moved during familiarization,Distance (m)
+NOR,fam_total explore time,Exploration time during familiarization,Time (s)
+NOR,test_novel_explore_time,Exploration time of novel object,Time (s)
+NOR,test_familiar_iz_time,Interaction zone time with familiar object,Time (s)
+NOR,test_novel_iz_time,Interaction zone time with novel object,Time (s)
+NOR,di_explore,Discrimination index (exploration),Index
+NOR,di_iz,Discrimination index (interaction zone),Index
+NOR,test_total distance moved,Total distance moved during test,Distance (m)
+
+OFT,total_distance_moved,Total distance moved,Distance (m)
+OFT,time_in_center,Time spent in center,Time (s)
+OFT,distance_moved_in_center,Distance moved in center,Distance (m)
+OFT,time_in_corners,Time spent in corners,Time (s)
+OFT,Supportedrearing_time,Time spent supported rearing,Time (s)
+OFT,Unsupportedrearing_time,Time spent unsupported rearing,Time (s)
+OFT,Supportedrearing_count,Number of supported rearing events,Count
+OFT,Unsupportedrearing_count,Number of unsupported rearing events,Count
+OFT,Grooming_time,Time spent grooming,Time (s)
+OFT,Grooming_count,Number of grooming events,Count
+
+
+VIT,delta_after_minus_before__standing__is_hand,Change in standing behavior (after − before),Delta (s)
+VIT,hand__Before__time in in right upper quadrant,Time in right upper quadrant (hand before),Time (s)
+VIT,hand__After__time in right lower quadrant,Time in right lower quadrant (hand after),Time (s)
+VIT,standing__Before__distance moved in left lower quadrant,Distance moved in left lower quadrant (standing before),Distance (m)
+VIT,standing__Before__distance moved in left upper quadrant,Distance moved in left upper quadrant (standing before),Distance (m)
+VIT,standing__Before__distance moved in right lower quadrant,Distance moved in right lower quadrant (standing before),Distance (m)
+VIT,standing__Before__distance moved in right upper quadrant,Distance moved in right upper quadrant (standing before),Distance (m)
