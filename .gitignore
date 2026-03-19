@@ -19,6 +19,10 @@ data/raw/
 # ---- Outputs ----
 outputs/
 outputs/**
+__pycache__/
+.pytest_cache/
+*.pyc
+src/*.egg-info/
 
 # ---- Logs ----
 *.log
