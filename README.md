@@ -138,3 +138,7 @@ Philosophy
 
     Make assumptions explicit, preserve raw information,
     and let configuration — not copy-paste — define the analysis.
+
+VIT endpoint panel (March 2026)
+
+This analysis includes a broad set of VIT endpoints (raw and derived) for first-pass screening and assay characterization. These results are not treated as confirmatory and will be used to define a restricted set of candidate endpoints for subsequent hypothesis-driven analyses.
