@@ -1,6 +1,9 @@
 experiment:
   id: EXP-2025-001
 
+group_order:
+  - cup
+  - tail
 paths:
   metadata_subjects: data/experiments/EXP-2025-001/metadata/subjects.csv
   processed_dir: data/experiments/EXP-2025-001/processed
