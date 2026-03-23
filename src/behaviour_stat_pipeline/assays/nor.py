@@ -37,6 +37,44 @@ from behaviour_stat_pipeline.common.qc import assert_unique_key
 
 FamiliarType = Literal["flask", "lego_tower"]
 
+import re
+
+NOR_HEADER_ALIASES = {
+    "average speed": "mean_speed",
+    "time in arena": "total_time_in_arena",
+    "time exploring flask_0": "time_exploring_flask_0",
+    "time exploring flask_1": "time_exploring_flask_1",
+    "time exploring lego_tower_0": "time_exploring_lego_tower_0",
+    "time exploring lego_tower_1": "time_exploring_lego_tower_1",
+    "time in interaction zone of flask_0": "time_in_interaction_zone_of_flask_0",
+    "time in interaction zone of flask_1": "time_in_interaction_zone_of_flask_1",
+    "time in interaction zone of lego_tower_0": "time_in_interaction_zone_of_lego_tower_0",
+    "time in interaction zone of lego_tower_1": "time_in_interaction_zone_of_lego_tower_1",
+    "total distance moved": "total_distance_moved",
+}
+
+def normalize_nor_headers(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+
+    new_cols = []
+    for col in df.columns:
+        col_clean = str(col).strip()
+        col_clean = re.sub(r"\s+", " ", col_clean)
+
+        # leave suspicious columns untouched but log
+        if col_clean.startswith(("Unnamed", "H")):
+            new_cols.append(col_clean)
+            continue
+
+        new_cols.append(NOR_HEADER_ALIASES.get(col_clean, col_clean))
+
+    # fail loudly if collisions introduced
+    if len(new_cols) != len(set(new_cols)):
+        dupes = sorted({c for c in new_cols if new_cols.count(c) > 1})
+        raise ValueError(f"NOR normalization created duplicate columns: {dupes}")
+
+    df.columns = new_cols
+    return df
 
 # Canonical column names in your exports
 FAM_EXPLORE_FLASK = ["time_exploring_flask_0", "time_exploring_flask_1"]
@@ -232,6 +270,9 @@ def derive_nor_metrics(
     cfg = cfg or NORConfig()
     if cfg.presence_rule != "nonzero":
         raise ValueError(f"Unsupported NORConfig.presence_rule: {cfg.presence_rule}")
+
+    fam = normalize_nor_headers(fam)
+    test = normalize_nor_headers(test)
 
     qc_nor(fam, test)
 

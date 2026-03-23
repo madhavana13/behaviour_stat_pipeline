@@ -16,13 +16,18 @@ __pycache__/
 # -------------------------
 # Data (do NOT track large/generated data)
 # -------------------------
-data/raw/
-data/interim/
-data/processed/
+# Ignore all experiment data
 
-# BUT keep metadata + configs
-!data/metadata/*.csv
-!configs/*.csv
+data/experiments/*/raw/
+data/experiments/*/interim/
+data/experiments/*/processed/
+data/experiments/*/processed_reference/
+data/experiments/*/raw/
+data/experiments/*/interim/
+data/experiments/*/processed/
+
+# Ignore temp/lock files
+*.~lock.*
 
 # -------------------------
 # Outputs (always generated)

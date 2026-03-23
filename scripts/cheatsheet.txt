@@ -53,9 +53,9 @@ For creating directories for a new experiment:
 
 change experiment name
 
-mkdir data\experiments\EXP-2026-002\metadata
-mkdir data\experiments\EXP-2026-002\raw
-mkdir data\experiments\EXP-2026-002\interim
+mkdir data\experiments\EXP-2025-001\metadata
+mkdir data\experiments\EXP-2025-001\raw
+mkdir data\experiments\EXP-2025-001\interim
 mkdir data\experiments\EXP-2026-002\processed
 
 mkdir data\experiments\EXP-2026-002\raw\vit

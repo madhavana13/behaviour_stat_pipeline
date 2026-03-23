@@ -1,0 +1,109 @@
+global:
+  normalize_whitespace: true
+  casefold_assay_keys: true
+
+vit:
+  raw:
+    "time in homecage": "time_in_homecage"
+    "total distance moved": "total_distance_moved"
+    "average speed": "mean_speed"
+    "time in in left upper quadrant": "time_in_left_upper_quadrant"
+    "distance moved in left upper quadrant": "distance_moved_in_left_upper_quadrant"
+    "average speed in left upper quadrant": "average_speed_in_left_upper_quadrant"
+    "transitions into left upper quadrant": "transitions_into_left_upper_quadrant"
+    "time in in right upper quadrant": "time_in_right_upper_quadrant"
+    "distance moved in right upper quadrant": "distance_moved_in_right_upper_quadrant"
+    "average speed in right upper quadrant": "average_speed_in_right_upper_quadrant"
+    "transitions into right upper quadrant": "transitions_into_right_upper_quadrant"
+    "time in in left lower quadrant": "time_in_left_lower_quadrant"
+    "distance moved in left lower quadrant": "distance_moved_in_left_lower_quadrant"
+    "average speed in left lower quadrant": "average_speed_in_left_lower_quadrant"
+    "transitions into left lower quadrant": "transitions_into_left_lower_quadrant"
+    "time in in right lower quadrant": "time_in_right_lower_quadrant"
+    "distance moved in right lower quadrant": "distance_moved_in_right_lower_quadrant"
+    "average speed in right lower quadrant": "average_speed_in_right_lower_quadrant"
+    "transitions into right lower quadrant": "transitions_into_right_lower_quadrant"
+    "time of nose in right lower quadrant": "time_of_nose_in_right_lower_quadrant"
+
+
+
+nor:
+  raw:
+    "average speed": "mean_speed"
+    "time in arena": "total_time_in_arena"
+    "total distance moved": "total_distance_moved"
+    "time exploring flask_0": "time_exploring_flask_0"
+    "time exploring flask_1": "time_exploring_flask_1"
+    "time exploring lego_tower_0": "time_exploring_lego_tower_0"
+    "time exploring lego_tower_1": "time_exploring_lego_tower_1"
+    "time in interaction zone of flask_0": "time_in_interaction_zone_of_flask_0"
+    "time in interaction zone of flask_1": "time_in_interaction_zone_of_flask_1"
+    "time in interaction zone of lego_tower_0": "time_in_interaction_zone_of_lego_tower_0"
+    "time in interaction zone of lego_tower_1": "time_in_interaction_zone_of_lego_tower_1"
+
+oft:
+  raw:
+    "average speed": "mean_speed"
+    "time in arena": "total_time_in_arena"
+    "total distance moved": "total_distance_moved"
+    "time in center": "time_in_center"
+    "distance moved in center": "distance_moved_in_center"
+    "average speed in center": "average_speed_in_center"
+    "transitions into center": "transitions_into_center"
+    "time in periphery": "time_in_periphery"
+    "distance moved in periphery": "distance_moved_in_periphery"
+    "average speed in periphery": "average_speed_in_periphery"
+    "transitions into periphery": "transitions_into_periphery"
+    "time in corners": "time_in_corners"
+    "distance moved in corners": "distance_moved_in_corners"
+    "average speed in corners": "average_speed_in_corners"
+    "transitions into corners": "transitions_into_corners"
+    "Supported rearing time": "supported_rearing_time"
+    "Supported rearing count": "supported_rearing_count"
+    "Unsupported rearing time": "unsupported_rearing_time"
+    "Unsupported rearing count": "unsupported_rearing_count"
+
+
+epm:
+  raw:
+    "average speed": "mean_speed"
+    "time in arena": "total_time_in_arena"
+    "total distance moved": "total_distance_moved"
+    "total time in arena": "total_time_in_arena"
+    "mean speed": "mean_speed"
+    "time in center": "time_in_center"
+    "distance moved in center": "distance_moved_in_center"
+    "transitions into center": "transitions_into_center"
+    "time on open arms": "time_on_open_arms"
+    "distance moved on open arms": "distance_moved_on_open_arms"
+    "transitions into open arms": "transitions_into_open_arms"
+    "time on closed arms": "time_on_closed_arms"
+    "distance moved on closed arms": "distance_moved_on_closed_arms"
+    "transitions into closed arms": "transitions_into_closed_arms"
+    "time head dipping": "time_head_dipping"
+    "count head dips": "count_head_dips"
+    "time psap": "time_psap"
+    "count psap": "count_psap"
+
+lm:
+  raw:
+    "average speed": "mean_speed"
+    "time in arena": "time_in_arena"
+    "total distance moved": "total_distance_moved"
+    "time in protected alley": "time_in_protected_alley"
+    "distance moved in protected alley": "distance_moved_in_protected_alley"
+    "transitions into protected alley": "transitions_into_protected_alley"
+    "latency to enter protected alley": "latency_to_enter_protected_alley"
+    "latency to re-enter protected alley": "latency_to_re_enter_protected_alley"
+    "time in central alley": "time_in_central_alley"
+    "distance moved in central alley": "distance_moved_in_central_alley"
+    "transitions into central alley": "transitions_into_central_alley"
+    "time in narrow alley": "time_in_narrow_alley"
+    "distance moved in narrow alley": "distance_moved_in_narrow_alley"
+    "transitions into narrow alley": "transitions_into_narrow_alley"
+    "latency to enter narrow alley": "latency_to_enter_narrow_alley"
+    "latency to re-enter narrow alley": "latency_to_re_enter_narrow_alley"
+
+
+sit:
+  raw: {}

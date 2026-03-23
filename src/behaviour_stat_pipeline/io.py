@@ -2,22 +2,22 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Union
+from typing import Optional, Union
 
 import pandas as pd
 
+from behaviour_stat_pipeline.common.schema import load_schema_aliases, normalize_headers
+
 
 _MOUSE_ID_PATTERNS = [
-    # NOR-style: 27A_FAM_ID9 or 27B_TEST_ID15
     re.compile(r"(?P<cage>\d+[A-Z]?)_(?:FAM|TEST)_ID(?P<num>\d+)\b", re.IGNORECASE),
-    # Generic: 27A_ID9
     re.compile(r"(?P<cage>\d+[A-Z]?)_ID(?P<num>\d+)\b", re.IGNORECASE),
 ]
+
 
 def extract_mouse_id(raw: str) -> str:
     s = str(raw).strip()
 
-    # NEW: accept already-normalized internal IDs like "ID10"
     if re.fullmatch(r"(?i)ID\d+", s):
         return s.upper()
 
@@ -50,12 +50,10 @@ def load_subjects(
         dups = subjects.loc[subjects["mouse_id"].duplicated(), "mouse_id"].unique()
         raise ValueError(f"Duplicate mouse_id in subjects.csv: {dups}")
 
-    # normalize coding (important for stable modelling later)
     subjects["mouse_id"] = subjects["mouse_id"].astype(str).str.strip()
     subjects["group"] = subjects["group"].astype(str).str.strip().str.lower()
     subjects["sex"] = subjects["sex"].astype(str).str.strip().str.lower()
 
-    # ---- group validation (optional) ----
     if allowed_groups is not None:
         bad_groups = set(subjects["group"].unique()) - allowed_groups
         if bad_groups:
@@ -65,7 +63,6 @@ def load_subjects(
             else:
                 print(f"WARNING: {msg}")
 
-    # ---- sex validation (usually keep strict) ----
     if allowed_sex is None:
         allowed_sex = {"male", "female"}
     bad_sex = set(subjects["sex"].unique()) - allowed_sex
@@ -79,9 +76,15 @@ def load_subjects(
     return subjects
 
 
-def load_tracking_csv(path: Union[str, Path], raw_id_col: str = "Unnamed: 0") -> pd.DataFrame:
+def load_tracking_csv(
+    path: Union[str, Path],
+    raw_id_col: str = "Unnamed: 0",
+    *,
+    assay: str | None = None,
+    schema_path: Union[str, Path] = "configs/schema_aliases.yaml",
+) -> pd.DataFrame:
     """
-    Load a tracking summary CSV and construct canonical identifiers.
+    Load a tracking summary CSV, normalize vendor headers, and construct canonical identifiers.
 
     Adds:
       - raw_id   : original identifier string from file
@@ -89,12 +92,24 @@ def load_tracking_csv(path: Union[str, Path], raw_id_col: str = "Unnamed: 0") ->
     """
     df = pd.read_csv(path)
 
-    # Robust raw ID column detection (Excel can mangle "Unnamed: 0")
+    schema = load_schema_aliases(schema_path)
+    df, rename_log, suspicious = normalize_headers(df, assay=assay, schema=schema)
+
+    if rename_log:
+        print(f"[Schema] {Path(path).name}: renamed {len(rename_log)} columns for assay={assay}")
+        for old, new in rename_log[:20]:
+            print(f"  {old} -> {new}")
+        if len(rename_log) > 20:
+            print(f"  ... and {len(rename_log) - 20} more")
+
+    if suspicious:
+        print(f"[Schema WARNING] {Path(path).name}: suspicious columns retained unchanged: {suspicious}")
+
     if raw_id_col not in df.columns:
         if "Unnamed" in df.columns and "0" in df.columns and df["0"].isna().all():
             raw_id_col = "Unnamed"
             df = df.drop(columns=["0"])
-        elif df.columns[0].lower().startswith("unnamed"):
+        elif len(df.columns) > 0 and str(df.columns[0]).lower().startswith("unnamed"):
             raw_id_col = df.columns[0]
         else:
             raise ValueError(
@@ -112,9 +127,8 @@ def merge_subject_metadata(
     df: pd.DataFrame,
     subjects: pd.DataFrame,
     *,
-    on_missing_subjects: str = "warn_drop",  # {"error", "warn_drop"}
+    on_missing_subjects: str = "warn_drop",
 ) -> pd.DataFrame:
-
     out = df.merge(subjects, on="mouse_id", how="left", validate="many_to_one")
 
     if out["group"].isna().any() or out["sex"].isna().any():

@@ -120,9 +120,9 @@ diagnostics:
       - transitions_into_closed_arms
       - transitions_into_open_arms
     vit: 
-      - delta_after_minus_before__standing__is_hand
-      - hand__Before__time in in right upper quadrant
-      - hand__After__time in in right lower quadrant
+      - delta_after_minus_before__hand__time in right lower quadrant
+      - hand__Before__time in right lower quadrant
+      - hand__After__time in right lower quadrant
       - standing__Before__distance moved in left lower quadrant
       - standing__Before__distance moved in left upper quadrant
       - standing__Before__distance moved in right lower quadrant
@@ -168,12 +168,11 @@ secondary_two_way_anova:
       - time_in_center
       - distance_moved_in_center
       - time_in_corners
-      - Supportedrearing_time
-      - Supportedrearing_count
-      - Unsupportedrearing_time
-      - Unsupportedrearing_count
-      - Grooming_time
-      - Grooming_count
+      - supported_rearing_time
+      - supported_rearing_count
+      - unsupported_rearing_time
+      - unsupported_rearing_count
+
 
     epm: 
       - count_head_dips
@@ -192,7 +191,6 @@ secondary_two_way_anova:
       - transitions_into_closed_arms
       - transitions_into_open_arms
     vit: 
-      - delta_after_minus_before__standing__is_hand
       - delta_after_minus_before__hand__time in right lower quadrant
       - hand__Before__time in right lower quadrant
       - hand__After__time in right lower quadrant
@@ -405,7 +403,7 @@ figures:
       x_gap: 0.8
       value_label: "Time (s)"
       x_order: ["Before", "After"]
-      group_order: ["control", "ifs"]
+      group_order: ["tail", "cup", "control", "ifs"]
       wide_to_long:
         x_col: "timepoint"
         mapping:

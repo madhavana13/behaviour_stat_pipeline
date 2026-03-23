@@ -89,7 +89,11 @@ class BaseAssayRunner:
         )
 
     def load_one_file(self, f: Path, subjects: pd.DataFrame, raw_id_col: str) -> pd.DataFrame:
-        df = load_tracking_csv(f, raw_id_col=raw_id_col)
+        df = load_tracking_csv(
+            f,
+            raw_id_col=raw_id_col,
+            assay=self.assay_name,
+        )
         df = merge_subject_metadata(df, subjects, on_missing_subjects="warn_drop")
         df["assay"] = self.assay_name
         df["source_file"] = str(f)
