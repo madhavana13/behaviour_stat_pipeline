@@ -18,13 +18,8 @@ __pycache__/
 # -------------------------
 # Ignore all experiment data
 
-data/experiments/*/raw/
-data/experiments/*/interim/
-data/experiments/*/processed/
-data/experiments/*/processed_reference/
-data/experiments/*/raw/
-data/experiments/*/interim/
-data/experiments/*/processed/
+data/
+outputs/
 
 # Ignore temp/lock files
 *.~lock.*
