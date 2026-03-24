@@ -8,6 +8,7 @@ from scipy.stats import levene
 import matplotlib.pyplot as plt
 import argparse
 import yaml
+from scipy.stats import binomtest
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = PROJECT_ROOT / "data" / "experiments"
@@ -277,6 +278,52 @@ def compute_variability_summary(
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
+def run_sign_test_variability(
+    df: pd.DataFrame,
+    exclude_assays: list[str] | None = None,
+) -> pd.DataFrame:
+    """
+    Perform binomial sign test:
+    H0: P(SD ratio < 1) = 0.5
+    """
+
+    if exclude_assays is None:
+        exclude_assays = ["VIT"]
+
+    df = df.loc[~df["assay"].isin(exclude_assays)].copy()
+
+    results = []
+
+    # overall
+    n_total = len(df)
+    n_success = int((df["sd_ratio_group1_over_group2"] < 1).sum())
+
+    test = binomtest(n_success, n_total, p=0.5, alternative="greater")
+
+    results.append({
+        "assay": "ALL_excl_VIT",
+        "n_endpoints": n_total,
+        "n_sd_ratio_lt_1": n_success,
+        "proportion": n_success / n_total,
+        "p_value": test.pvalue,
+    })
+
+    # per assay
+    for assay, g in df.groupby("assay"):
+        n = len(g)
+        k = int((g["sd_ratio_group1_over_group2"] < 1).sum())
+
+        test = binomtest(k, n, p=0.5, alternative="greater")
+
+        results.append({
+            "assay": assay,
+            "n_endpoints": n,
+            "n_sd_ratio_lt_1": k,
+            "proportion": k / n,
+            "p_value": test.pvalue,
+        })
+
+    return pd.DataFrame(results)
 
 def plot_variability_summary(
     variability_df: pd.DataFrame,
@@ -489,6 +536,7 @@ def process_experiment(
     levene_df = run_levene_by_group(master_long, min_n_per_group=3)
     var_df = compute_variability_summary(master_long, group_order=group_order)
     var_df.to_csv(output_tables / "MASTER_variability_summary.csv", index=False)
+    sign_df = run_sign_test_variability(var_df)
 
     wide_path = output_tables / "MASTER_processed_wide.csv"
     long_path = output_tables / "MASTER_processed_long.csv"
@@ -496,6 +544,8 @@ def process_experiment(
     log_path = output_logs / "MASTER_combined_summary.txt"
     plot_path = output_tables / "MASTER_variability_summary.png"
     variability_path = output_tables / "MASTER_variability_summary.csv"
+    plot_ex_vit_path = output_tables / "MASTER_variability_summary_excluding_VIT.png"
+    sign_path = output_tables / "MASTER_variability_sign_test.csv"
 
     plot_variability_summary(
         variability_df=var_df,
@@ -506,6 +556,7 @@ def process_experiment(
     master_wide.to_csv(wide_path, index=False)
     master_long.to_csv(long_path, index=False)
     levene_df.to_csv(levene_path, index=False)
+    sign_df.to_csv(sign_path, index=False)
 
     write_summary_log(
         experiment_id=experiment_id,
@@ -523,8 +574,9 @@ def process_experiment(
     print(f"  - {log_path}")
     print(f"  - {variability_path}")
     print(f"  - {plot_path}")
-    plot_ex_vit_path = output_tables / "MASTER_variability_summary_excluding_VIT.png"
     print(f"  - {plot_ex_vit_path}")
+    print("\n=== Sign test for variability (SD ratio < 1) ===")
+    print(sign_df.to_string(index=False))
 
 
 def main() -> None:
