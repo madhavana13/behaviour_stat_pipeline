@@ -1,17 +1,13 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import List, Optional
 
-import numpy as np
-import pandas as pd
 import matplotlib.pyplot as plt
-
-from .common import PlotStyle, infer_order, require_columns
-from .common import jitter_from_ids
-
 import numpy as np
 import pandas as pd
+
+from .common import PlotStyle, infer_order, jitter_from_ids, require_columns
 
 
 def _parse_term_to_key(term: str) -> str:
@@ -19,19 +15,21 @@ def _parse_term_to_key(term: str) -> str:
     Map statsmodels term strings to compact keys.
     """
     t = str(term)
-    if ":C(Q(\"sex\"))" in t and "C(Q(\"group\"))" in t:
+    if ':C(Q("sex"))' in t and 'C(Q("group"))' in t:
         return "interaction"
-    if "C(Q(\"group\"))" in t:
+    if 'C(Q("group"))' in t:
         return "group"
-    if "C(Q(\"sex\"))" in t:
+    if 'C(Q("sex"))' in t:
         return "sex"
     return ""
 
 
 def _stars_from_label(label: str) -> str:
     """
-    Convert your stored significance_label into stars.
-    Accepts: 'ns', '<0.05', '<0.01', '<0.001', '<0.0001'
+    Convert stored significance_label into stars.
+    Accepts:
+      'ns', '<0.05', '<0.01', '<0.001', '<0.0001'
+    Also accepts direct star strings.
     """
     s = str(label).strip().lower()
     if s in ("ns", "", "nan", "none"):
@@ -44,10 +42,17 @@ def _stars_from_label(label: str) -> str:
         return "**"
     if "<0.05" in s:
         return "*"
-    # fallback: if label already stars
     if set(s) <= set("*"):
         return s
     return ""
+
+
+def _label_from_significance(label: str) -> str:
+    """
+    Return stars if significant, otherwise 'ns'.
+    """
+    stars = _stars_from_label(label)
+    return stars if stars else "ns"
 
 
 def _draw_main_effect_bracket(
@@ -56,11 +61,11 @@ def _draw_main_effect_bracket(
     x1: float,
     x2: float,
     label: str,
-    y_pad_frac: float = 0.08,
+    y_pad_frac: float = 0.12,
     h_frac: float = 0.035,
     title_buffer_frac: float = 0.12,
     lw: float = 1.2,
-):
+) -> None:
     """
     Draw a bracket from x1 to x2 at the top of the plot with a star label.
     """
@@ -69,8 +74,9 @@ def _draw_main_effect_bracket(
 
     y0, y1 = ax.get_ylim()
     yr = y1 - y0
+    if yr <= 0:
+        yr = 1.0
 
-    # place bracket clearly above data
     y = y1 + y_pad_frac * yr
     h = h_frac * yr
 
@@ -84,14 +90,40 @@ def _draw_main_effect_bracket(
 
     ax.text(
         (x1 + x2) / 2,
-        y + h + 0.01 * yr,   # <-- small lift for stars
+        y + h + 0.01 * yr,
         label,
         ha="center",
         va="bottom",
     )
 
-    # extend ylim *generously* so title never overlaps
     ax.set_ylim(y0, y + h + title_buffer_frac * yr)
+
+
+def _draw_anova_text_lines(
+    ax,
+    lines: List[str],
+    position: str = "top_right",
+    fontsize: float = 10,
+) -> None:
+    if not lines:
+        return
+
+    if position == "top_left":
+        x, ha = 0.00, "left"
+    else:
+        x, ha = 1.00, "right"
+
+    text = "\n".join(lines)
+    ax.text(
+        x,
+        1.03,  # outside plotting area
+        text,
+        transform=ax.transAxes,
+        ha=ha,
+        va="top",
+        fontsize=fontsize,
+        clip_on=False,
+    )
 
 
 def plot_group_boxpoints(
@@ -113,27 +145,31 @@ def plot_group_boxpoints(
     y_label: Optional[str] = None,
     anova_endpoint: Optional[str] = None,
     show: bool = False,
-    anova_df=None,
-    anova_cfg=None,
+    anova_df: Optional[pd.DataFrame] = None,
+    anova_cfg: Optional[dict] = None,
 ) -> None:
     """
     Draw Prism-like box+whisker plots with individual points:
     - edgecolor of box = group color
     - points overlaid with sex-specific markers
-    - x-axis categories from x_col (e.g., Familiar/Novel)
-    - groups shown as separated blocks with a gap (like your example)
+    - x-axis categories from x_col
+    - groups shown as separated blocks with a gap
     """
     if style is None:
         raise ValueError("plot_group_boxpoints requires a PlotStyle (pass from config).")
-    
+
     if mouse_id_col is None or str(mouse_id_col).strip() == "":
-       raise ValueError("mouse_id_col is required for stable jittered points.")
+        raise ValueError("mouse_id_col is required for stable jittered points.")
 
     require_columns(df, [value_col, x_col, group_col, sex_col])
-    d = df[[value_col, x_col, group_col, sex_col] + ([mouse_id_col] if mouse_id_col else [])].copy()
+
+    keep_cols = [value_col, x_col, group_col, sex_col]
+    if mouse_id_col:
+        keep_cols.append(mouse_id_col)
+
+    d = df[keep_cols].copy()
     d = d.dropna(subset=[value_col, x_col, group_col, sex_col])
 
-    # Orders (deterministic)
     x_levels = infer_order(d[x_col].astype(str).tolist(), preferred=x_order)
     g_levels = infer_order(d[group_col].astype(str).tolist(), preferred=group_order)
     s_levels = infer_order(d[sex_col].astype(str).tolist(), preferred=sex_order)
@@ -141,44 +177,45 @@ def plot_group_boxpoints(
     if len(x_levels) < 1 or len(g_levels) < 1:
         raise ValueError("No levels found for x or group after dropping NAs.")
 
-    # Layout: for each group, plot the x_levels as adjacent boxes, and leave a gap between groups
     n_x = len(x_levels)
 
     positions = {}
-    xticks = []
-    xticklabels = []
+    xticks: List[float] = []
+    xticklabels: List[str] = []
 
-    base = 1.0
+    base = 0.0
 
     if n_x == 1:
-        # Simple layout: groups side-by-side for single x category (e.g. Total)
+        # true center-to-center spacing controlled directly by group_gap
+        step = 1.0 + style.group_gap
         x = x_levels[0]
         for gi, g in enumerate(g_levels):
-            pos = base + gi * (1.0 + style.group_gap)
+            pos = base + gi * step
             positions[(g, x)] = pos
             xticks.append(pos)
-            xticklabels.append(str(x))  # keep "Total" under each group
+            xticklabels.append(str(x))
     else:
-        # Block layout: x categories within each group, with group_gap between blocks
-        x_gap = getattr(style, "x_gap", 0.8)  # default keeps current behavior
-
-        group_block_width = (n_x - 1) * x_gap + 1.0 + 0.4  # scaled width
+        # within-group spacing = x_gap
+        # between-group spacing = group_gap
+        group_block_width = (n_x - 1) * style.x_gap
         for gi, g in enumerate(g_levels):
-            block_start = base + gi * (group_block_width + style.group_gap)
+            block_start = base + gi * (group_block_width + style.group_gap + 1.0)
             for xi, x in enumerate(x_levels):
-                pos = block_start + xi * x_gap
+                pos = block_start + xi * style.x_gap
                 positions[(g, x)] = pos
                 xticks.append(pos)
                 xticklabels.append(str(x))
 
-
     fig, ax = plt.subplots(figsize=(5.2, 4.2), dpi=300)
 
-    # Draw boxes per (group, x)
     for g in g_levels:
         edge = style.group_edgecolors.get(str(g).lower(), "black")
+
         for x in x_levels:
-            sub = d[(d[group_col].astype(str) == str(g)) & (d[x_col].astype(str) == str(x))]
+            sub = d[
+                (d[group_col].astype(str) == str(g))
+                & (d[x_col].astype(str) == str(x))
+            ]
             y = sub[value_col].astype(float).to_numpy()
             pos = positions[(g, x)]
 
@@ -194,7 +231,6 @@ def plot_group_boxpoints(
                 whis=1.5,
             )
 
-            # box styling: white fill, colored edge
             for box in bp["boxes"]:
                 box.set(facecolor="white", edgecolor=edge, linewidth=style.box_linewidth)
             for med in bp["medians"]:
@@ -204,31 +240,24 @@ def plot_group_boxpoints(
             for cap in bp["caps"]:
                 cap.set(color=edge, linewidth=style.cap_linewidth)
 
-            # Overlay points, sex-specific markers.
-
-
-            # plot per sex to get marker shapes
-            # small deterministic dodge so male/female don't sit on top of each other
-
             for s in s_levels:
                 sub_s = sub[sub[sex_col].astype(str) == str(s)]
                 if sub_s.empty:
                     continue
+
                 ys = sub_s[value_col].astype(float).to_numpy()
+                mids_s = sub_s[mouse_id_col].astype(str).tolist()
+                jit_s = jitter_from_ids(mids_s, sd=style.jitter_sd)
 
-                if mouse_id_col:
-                    mids_s = sub_s[mouse_id_col].astype(str).tolist()
-                    jit_s = jitter_from_ids(mids_s, sd=style.jitter_sd)
-
-                    sex_dodge = style.sex_dodge
-                    offset = (-sex_dodge / 2.0) if str(s).lower() == "female" else (sex_dodge / 2.0)
-                    xjs = pos + jit_s + offset
+                sex_dodge = style.sex_dodge
+                offset = (-sex_dodge / 2.0) if str(s).lower() == "female" else (sex_dodge / 2.0)
+                xjs = pos + jit_s + offset
 
                 ax.scatter(
                     xjs,
                     ys,
                     s=style.point_size,
-                    marker= style.sex_markers.get(str(s).lower(), "o"),
+                    marker=style.sex_markers.get(str(s).lower(), "o"),
                     alpha=style.point_alpha,
                     c="black",
                     edgecolors="black",
@@ -236,20 +265,17 @@ def plot_group_boxpoints(
                     zorder=3,
                 )
 
-
-    # x-axis ticks/labels
     ax.set_xticks(xticks)
     ax.set_xticklabels(xticklabels, rotation=0)
 
-
-# Add group labels under blocks using axis coordinates (robust to ylim changes)
     for g in g_levels:
         block_positions = [positions[(g, x)] for x in x_levels]
         center = float(np.mean(block_positions))
         label = "IFS" if str(g).lower() == "ifs" else str(g).capitalize()
+
         ax.text(
             center,
-            -0.12,  # below the axis; adjust if you want
+            -0.12,
             label,
             ha="center",
             va="top",
@@ -258,34 +284,47 @@ def plot_group_boxpoints(
             clip_on=False,
         )
 
-
-    # Labels / title
     ax.set_title(title or f"{assay} — {endpoint}", fontsize=12, pad=18)
     ax.set_ylabel(y_label or endpoint)
     ax.set_xlabel("")
 
-    # --- main-effect significance annotation (collapsed plots) ---
-    if anova_cfg and bool(anova_cfg.get("enabled", False)) and anova_df is not None and not anova_df.empty:
+    # --- ANOVA annotation (group / sex / interaction) ---
+    if (
+        anova_cfg
+        and bool(anova_cfg.get("enabled", False))
+        and anova_df is not None
+        and not anova_df.empty
+    ):
         endpoint_col = str(anova_cfg.get("endpoint_col", "endpoint"))
         term_col = str(anova_cfg.get("term_col", "term"))
         label_col = str(anova_cfg.get("label_col", "significance_label"))
 
+        display_cfg = anova_cfg.get("display", {}) or {}
+        group_mode = str(display_cfg.get("group", "bracket")).lower()
+        sex_mode = str(display_cfg.get("sex", "text")).lower()
+        interaction_mode = str(display_cfg.get("interaction", "text")).lower()
+
+        text_position = str(anova_cfg.get("position", "top_right"))
+        text_fontsize = float(anova_cfg.get("fontsize", 10))
+
         key = anova_endpoint if anova_endpoint else endpoint
         sub = anova_df[anova_df[endpoint_col].astype(str) == str(key)]
 
+        text_lines: List[str] = []
+
         if not sub.empty and term_col in sub.columns and label_col in sub.columns:
-            # only main effect of group makes sense for your collapsed Cup vs Tail plots
-            row = None
+            labels_by_term = {"group": None, "sex": None, "interaction": None}
+
             for _, r in sub.iterrows():
-                if _parse_term_to_key(r[term_col]) == "group":
-                    row = r
-                    break
+                k = _parse_term_to_key(r[term_col])
+                if k in labels_by_term and labels_by_term[k] is None:
+                    labels_by_term[k] = str(r[label_col])
 
-            if row is not None:
-                stars = _stars_from_label(row[label_col])
-
-                # only draw if there are >=2 groups and exactly one x-level
-                if stars and len(g_levels) >= 2 and len(x_levels) == 1:
+            # group
+            g_label = labels_by_term["group"]
+            g_stars = _label_from_significance(g_label) if g_label is not None else None
+            if g_stars is not None:
+                if group_mode == "bracket" and g_stars != "ns" and len(g_levels) >= 2 and len(x_levels) == 1:
                     x = x_levels[0]
                     g1 = g_levels[0]
                     g2 = g_levels[-1]
@@ -295,21 +334,49 @@ def plot_group_boxpoints(
                         ax=ax,
                         x1=min(x1, x2),
                         x2=max(x1, x2),
-                        label=stars,
+                        label=g_stars,
                         y_pad_frac=float(anova_cfg.get("y_pad_frac", 0.05)),
                         h_frac=float(anova_cfg.get("h_frac", 0.03)),
+                        title_buffer_frac=float(anova_cfg.get("title_buffer_frac", 0.12)),
                         lw=float(anova_cfg.get("linewidth", 1.2)),
                     )
+                elif group_mode == "text" or (group_mode == "bracket" and len(x_levels) != 1):
+                    text_lines.append(f"group: {g_stars}")
 
-    # Aesthetic: Prism-like axes
+            # sex
+            s_label = labels_by_term["sex"]
+            s_stars = _label_from_significance(s_label) if s_label is not None else None
+            if s_stars is not None and sex_mode == "text":
+                text_lines.append(f"sex: {s_stars}")
+
+            # interaction
+            i_label = labels_by_term["interaction"]
+            i_stars = _label_from_significance(i_label) if i_label is not None else None
+            if i_stars is not None and interaction_mode == "text":
+                text_lines.append(f"interaction: {i_stars}")
+
+        _draw_anova_text_lines(
+            ax,
+            text_lines,
+            position=text_position,
+            fontsize=text_fontsize,
+        )
+
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
     ax.spines["left"].set_linewidth(2)
     ax.spines["bottom"].set_linewidth(2)
     ax.tick_params(width=1)
-    ymax = d[value_col].max()
-    ax.set_ylim(0, ymax * 1.15) 
 
+    ymax = float(d[value_col].max())
+    ymin = float(d[value_col].min())
+
+    # keep zero baseline, but reserve annotation room above data
+    top = ymax * 1.38 if ymax > 0 else 1.0
+    ax.set_ylim(0, top)
+    xmin = min(xticks) - 0.45
+    xmax = max(xticks) + 0.45
+    ax.set_xlim(xmin, xmax)
     fig.tight_layout(rect=[0, 0, 1, 0.92])
 
     for p in out_paths:
@@ -318,4 +385,5 @@ def plot_group_boxpoints(
 
     if show:
         plt.show()
+
     plt.close(fig)
