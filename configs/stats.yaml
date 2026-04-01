@@ -41,6 +41,7 @@ design:
     epm: []
     nor: []
     lm: []
+    misc: []
 
 optional:
   blocking_factors: []         # e.g., [cohort, batch] later
@@ -52,9 +53,22 @@ assays:
   - oft
   - epm
   - lm
+  - misc
 
 primary_one_sample:
   enabled: true
+  group_col: group
+  collapse_over: [sex]
+  correction: holm
+  run_ttest: true
+  run_wilcoxon: true
+
+  nulls:
+    nor:
+      di_explore: 0.0
+      di_iz: 0.0
+    misc:
+      rct_di: 0.0
 
   # which columns define "groups" to test within (sex collapsed by default)
   group_col: group
@@ -120,16 +134,18 @@ diagnostics:
       - transitions_into_closed_arms
       - transitions_into_open_arms
     vit: 
-      - delta_after_minus_before__hand__time in right lower quadrant
-      - hand__Before__time in right lower quadrant
-      - hand__After__time in right lower quadrant
-      - standing__Before__distance moved in left lower quadrant
-      - standing__Before__distance moved in left upper quadrant
-      - standing__Before__distance moved in right lower quadrant
-      - standing__Before__distance moved in right upper quadrant
+      - delta_after_minus_before__hand__time_in_right_lower_quadrant
+      - hand__Before__time_in_right_lower_quadrant
+      - hand__Before__time_in_right_lower_quadrant
+      - hand__After__time_in_right_lower_quadrant
+      - standing__Before__distance_moved_in_left_lower_quadrant
+      - standing__Before__distance_moved_in_left_upper_quadrant
+      - standing__Before__distance_moved_in_right_lower_quadrant
+      - standing__Before__distance_moved_in_right_upper_quadrant
 
     lm:
       - distance_moved_in_central_alley
+      - total_distance_moved
       - distance_moved_in_narrow_alley
       - distance_moved_in_protected_alley
       - latency_to_enter_narrow_alley
@@ -142,6 +158,17 @@ diagnostics:
       - time_in_central_alley
       - time_in_narrow_alley
       - time_in_protected_alley
+
+    misc:
+      - left_adrenal_mg
+      - right_adrenal_mg
+      - adrenal_total_mg
+      - left_adrenal_mg_per_g_bw
+      - right_adrenal_mg_per_g_bw
+      - adrenal_total_mg_per_g_bw
+      - rct_total_intake
+      - rct_pi
+      - rct_di
 
 secondary_two_way_anova:
   enabled: true
@@ -193,6 +220,7 @@ secondary_two_way_anova:
     vit: 
       - delta_after_minus_before__hand__time_in_right_lower_quadrant
       - hand__Before__time_in_right_lower_quadrant
+      - hand__Before__time_in_right_lower_quadrant
       - hand__After__time_in_right_lower_quadrant
       - standing__Before__distance_moved_in_left_lower_quadrant
       - standing__Before__distance_moved_in_left_upper_quadrant
@@ -201,6 +229,7 @@ secondary_two_way_anova:
 
     lm:
       - distance_moved_in_central_alley
+      - total_distance_moved
       - distance_moved_in_narrow_alley
       - distance_moved_in_protected_alley
       - latency_to_enter_narrow_alley
@@ -213,6 +242,17 @@ secondary_two_way_anova:
       - time_in_central_alley
       - time_in_narrow_alley
       - time_in_protected_alley
+
+    misc:
+      - left_adrenal_mg
+      - right_adrenal_mg
+      - adrenal_total_mg
+      - left_adrenal_mg_per_g_bw
+      - right_adrenal_mg_per_g_bw
+      - adrenal_total_mg_per_g_bw
+      - rct_total_intake
+      - rct_pi
+      - rct_di
 
 
   posthoc:
@@ -415,3 +455,48 @@ figures:
     # Create one pooled scatter per correlations.specs entry (Friday-safe)
     fit_enabled: true
     exclude: []  # optional list of correlation spec names to skip
+
+
+misc:
+  raw_file: data/experiments/EXP-2026-002/metadata/misc_raw.csv
+
+  masks:
+    - when: flag_rct
+      equals: 1
+      targets: [sucrose_consumption, normal_consumption]
+
+  derived_metrics:
+    - name: adrenal_total_mg
+      kind: sum
+      columns: [left_adrenal_mg, right_adrenal_mg]
+
+    - name: left_adrenal_mg_per_g_bw
+      kind: normalize_by
+      value: left_adrenal_mg
+      by: terminal_weight
+
+    - name: right_adrenal_mg_per_g_bw
+      kind: normalize_by
+      value: right_adrenal_mg
+      by: terminal_weight
+
+    - name: adrenal_total_mg_per_g_bw
+      kind: normalize_by
+      value: adrenal_total_mg
+      by: terminal_weight
+
+    - name: rct_total_intake
+      kind: sum
+      columns: [sucrose_consumption, normal_consumption]
+
+    - name: rct_pi
+      kind: pi
+      preferred: sucrose_consumption
+      other: normal_consumption
+
+    - name: rct_di
+      kind: di
+      preferred: sucrose_consumption
+      other: normal_consumption
+
+

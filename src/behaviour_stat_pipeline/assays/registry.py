@@ -41,6 +41,13 @@ from behaviour_stat_pipeline.assays.lm import (
     LMConfig,
 )
 
+from behaviour_stat_pipeline.assays.misc import (
+    read_misc_csv,
+    qc_misc,
+    apply_misc_masks,
+    derive_misc_metrics,
+    summarize_misc,
+)
 
 def subjects_validation_from_cfg(cfg: dict) -> tuple[set[str] | None, bool, set[str], bool]:
     sub = cfg.get("subjects", {})
@@ -65,6 +72,7 @@ class RunContext:
     raw_id_col: str
     out: str
     cfg: dict
+    schema_aliases: dict
 
 
 class BaseAssayRunner:
@@ -98,7 +106,22 @@ class BaseAssayRunner:
         df["assay"] = self.assay_name
         df["source_file"] = str(f)
         return df
-
+    
+    def _load_session(
+        self,
+        files: list[Path],
+        session: str,
+        subjects: pd.DataFrame,
+        raw_id_col: str,
+    ) -> pd.DataFrame:
+        dfs = []
+        for f in files:
+            df = self.load_one_file(f, subjects, raw_id_col)
+            df["timepoint"] = "Single"
+            df["session"] = session
+            dfs.append(df)
+        return pd.concat(dfs, ignore_index=True)
+    
     def build_long(self, ctx: RunContext, subjects: pd.DataFrame) -> tuple[pd.DataFrame, int]:
         files = self.find_files(ctx.root, ctx.pattern)
         dfs = [self.annotate_loaded_df(self.load_one_file(f, subjects, ctx.raw_id_col), f) for f in files]
@@ -230,7 +253,7 @@ class LMRunner(SingleSessionRunner):
 class NORRunner(BaseAssayRunner):
     assay_name = "NOR"
     default_output = "data/processed/NOR_processed.csv"
-
+    
     def run(self, ctx: RunContext) -> None:
         subjects = self.load_subjects_df(ctx)
 
@@ -245,7 +268,12 @@ class NORRunner(BaseAssayRunner):
         fam = self._load_session(fam_files, "FAM", subjects, ctx.raw_id_col)
         test = self._load_session(test_files, "TEST", subjects, ctx.raw_id_col)
 
-        processed = derive_nor_metrics(fam, test, cfg=NORConfig())
+        processed = derive_nor_metrics(
+            fam,
+            test,
+            schema_aliases=ctx.schema_aliases,
+            cfg=NORConfig(),
+        )
         sanity = summarize_nor_sanity(processed, min_total_s=20.0)
         print(sanity)
 
@@ -269,20 +297,53 @@ class NORRunner(BaseAssayRunner):
         print(f"Saved: {res.out_csv}")
         print(f"Summary: {res.out_summary}")
 
-    def _load_session(
-        self,
-        files: list[Path],
-        session: str,
-        subjects: pd.DataFrame,
-        raw_id_col: str,
-    ) -> pd.DataFrame:
-        dfs = []
-        for f in files:
-            df = self.load_one_file(f, subjects, raw_id_col)
-            df["timepoint"] = "Single"
-            df["session"] = session
-            dfs.append(df)
-        return pd.concat(dfs, ignore_index=True)
+class MISCRunner(BaseAssayRunner):
+    assay_name = "MISC"
+    default_output = "data/processed/MISC_processed.csv"
+    default_pattern = "*.csv"
+
+    def run(self, ctx: RunContext) -> None:
+        subjects = self.load_subjects_df(ctx)
+
+        raw = read_misc_csv(ctx.root)
+        qc_misc(raw)
+
+        long_df = merge_subject_metadata(raw, subjects, on_missing_subjects="warn_drop")
+        long_df["source_file"] = str(ctx.root)
+
+        misc_cfg = (ctx.cfg.get("misc", {}) or {})
+        masks = misc_cfg.get("masks", [])
+        derived_metrics = misc_cfg.get("derived_metrics", [])
+
+        long_df = apply_misc_masks(
+            long_df,
+            masks=masks,
+        )
+
+        processed = derive_misc_metrics(
+            long_df,
+            derived_metrics=derived_metrics,
+        )
+
+        out_path = self.output_path(ctx.out)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+
+        coverage_msg = warn_missing_subjects_coverage(
+            processed["mouse_id"], subjects, where=self.assay_name
+        )
+        summary_msg = summarize_misc(processed)
+
+        extra_lines = [m for m in [coverage_msg, summary_msg] if m]
+
+        res = save_processed(
+            processed,
+            out_csv=out_path,
+            assay=self.assay_name,
+            files_n=1,
+            extra_lines=extra_lines,
+        )
+        print(f"Saved: {res.out_csv}")
+        print(f"Summary: {res.out_summary}")
 
 
 RUNNER_REGISTRY: dict[str, BaseAssayRunner] = {
@@ -291,4 +352,5 @@ RUNNER_REGISTRY: dict[str, BaseAssayRunner] = {
     "EPM": EPMRunner(),
     "NOR": NORRunner(),
     "LM": LMRunner(),
+    "MISC": MISCRunner(),
 }

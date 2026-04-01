@@ -4,7 +4,8 @@ from pathlib import Path
 import yaml
 
 from behaviour_stat_pipeline.assays.registry import RUNNER_REGISTRY, RunContext
-
+from behaviour_stat_pipeline.common.schema import load_schema_aliases
+schema_aliases = load_schema_aliases("configs/schema_aliases.yaml")
 
 def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser()
@@ -40,9 +41,25 @@ def resolve_assay_inputs(args: argparse.Namespace, shared_cfg: dict, exp_cfg: di
     exp_paths = exp_cfg.get("paths", {})
     exp_raw = exp_cfg.get("raw", {})
     exp_patterns = exp_cfg.get("assay_patterns", {})
+    misc_cfg = shared_cfg.get("misc", {})
 
-    # Precedence:
-    # CLI explicit value > experiment config > default fallback
+    subjects = args.subjects or exp_paths.get("metadata_subjects", "data/metadata/subjects.csv")
+    out = args.out or str(Path(exp_paths.get("processed_dir", "data/processed")) / f"{args.assay.upper()}_processed.csv")
+
+    if assay_key == "misc":
+        raw_file = (
+            args.root
+            or exp_raw.get("misc", "")
+            or misc_cfg.get("raw_file", "")
+        )
+        if not raw_file:
+            raise ValueError(
+                "No raw file provided for assay 'MISC'. "
+                "Use --root with the path to misc_raw.csv, or define raw.misc in the experiment config, "
+                "or misc.raw_file in the shared config."
+            )
+        return Path(raw_file), "", subjects, out
+
     root = args.root or exp_raw.get(assay_key, "")
     if not root:
         raise ValueError(
@@ -50,12 +67,7 @@ def resolve_assay_inputs(args: argparse.Namespace, shared_cfg: dict, exp_cfg: di
             f"Use --root or define raw.{assay_key} in experiment config."
         )
 
-    subjects = args.subjects or exp_paths.get("metadata_subjects", "data/metadata/subjects.csv")
-
     pattern = args.pattern or exp_patterns.get(assay_key, "*_output_summary.csv")
-
-    out = args.out or str(Path(exp_paths.get("processed_dir", "data/processed")) / f"{args.assay.upper()}_processed.csv")
-
     return Path(root), pattern, subjects, out
 
 
@@ -87,6 +99,7 @@ def main() -> None:
         raw_id_col=args.raw_id_col,
         out=out,
         cfg=cfg,
+        schema_aliases=schema_aliases,
     )
 
     RUNNER_REGISTRY[args.assay].run(ctx)

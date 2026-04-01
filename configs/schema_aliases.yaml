@@ -29,17 +29,27 @@ vit:
 
 nor:
   raw:
-    "average speed": "mean_speed"
+    "average speed": "average_speed"
+    "mean speed": "mean_speed"
     "time in arena": "total_time_in_arena"
+    "total time in arena": "total_time_in_arena"
     "total distance moved": "total_distance_moved"
+
     "time exploring flask_0": "time_exploring_flask_0"
     "time exploring flask_1": "time_exploring_flask_1"
+
     "time exploring lego_tower_0": "time_exploring_lego_tower_0"
     "time exploring lego_tower_1": "time_exploring_lego_tower_1"
+    "time exploring lego tower_0": "time_exploring_lego_tower_0"
+    "time exploring lego tower_1": "time_exploring_lego_tower_1"
+
     "time in interaction zone of flask_0": "time_in_interaction_zone_of_flask_0"
     "time in interaction zone of flask_1": "time_in_interaction_zone_of_flask_1"
+
     "time in interaction zone of lego_tower_0": "time_in_interaction_zone_of_lego_tower_0"
     "time in interaction zone of lego_tower_1": "time_in_interaction_zone_of_lego_tower_1"
+    "time in interaction zone of lego tower_0": "time_in_interaction_zone_of_lego_tower_0"
+    "time in interaction zone of lego tower_1": "time_in_interaction_zone_of_lego_tower_1"
 
 oft:
   raw:
