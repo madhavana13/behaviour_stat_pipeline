@@ -45,3 +45,5 @@ outputs/
 # Tables (generated ONLY in outputs/)
 # -------------------------
 outputs/**/*.csv
+behaviour_stat_pipeline_review/
+*.zip
