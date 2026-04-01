@@ -19,6 +19,7 @@ raw:
   oft: data/experiments/EXP-2026-002/raw/oft
   epm: data/experiments/EXP-2026-002/raw/epm
   lm: data/experiments/EXP-2026-002/raw/lm
+  misc: data/experiments/EXP-2026-002/metadata/misc_raw.csv
 
 assay_patterns:
   vit: "*_output_summary.csv"

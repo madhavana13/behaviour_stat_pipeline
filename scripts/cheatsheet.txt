@@ -1,19 +1,35 @@
-running assays:
 
-            python scripts/run_assay.py --assay OFT --root ".\data\raw\oft"     
-            python scripts/run_assay.py --assay VIT --root ".\data\raw\vit"    
-            python scripts/run_assay.py --assay EPM --root ".\data\raw\epm"  
-            python scripts/run_assay.py --assay NOR --root ".\data\raw\nor" 
-            python scripts/run_assay.py --assay LM --root ".\data\raw\lm"         
-
-            python scripts/run_stats.py --config configs/stats.yaml --assays nor
 
 from experiment.yaml:
 
-python scripts/run_assay.py --assay vit --config configs/stats.yaml --experiment-config configs/experiments/EXP-2026-002.yaml
-python scripts/run_assay.py --assay nor --config configs/stats.yaml --experiment-config configs/experiments/EXP-2026-002.yaml
-python scripts/run_assay.py --assay lm --config configs/stats.yaml --experiment-config configs/experiments/EXP-2026-002.yaml
-python scripts/run_assay.py --assay oft --config configs/stats.yaml --experiment-config configs/experiments/EXP-2026-002.yaml
+python scripts/run_assay.py --assay vit --config configs/stats.yaml --experiment-config configs/experiments/EXP-2025-001.yaml
+python scripts/run_assay.py --assay nor --config configs/stats.yaml --experiment-config configs/experiments/EXP-2025-001.yaml
+python scripts/run_assay.py --assay lm --config configs/stats.yaml --experiment-config configs/experiments/EXP-2025-001.yaml
+python scripts/run_assay.py --assay oft --config configs/stats.yaml --experiment-config configs/experiments/EXP-2025-001.yaml
+python scripts/run_assay.py --assay epm --config configs/stats.yaml --experiment-config configs/experiments/EXP-2025-001.yaml
+
+
+
+python scripts/run_stats.py --config configs/stats.yaml --experiment-config configs/experiments/EXP-2025-001.yaml --assays nor   
+python scripts/run_stats.py --config configs/stats.yaml --experiment-config configs/experiments/EXP-2025-001.yaml --assays oft
+python scripts/run_stats.py --config configs/stats.yaml --experiment-config configs/experiments/EXP-2025-001.yaml --assays epm
+python scripts/run_stats.py --config configs/stats.yaml --experiment-config configs/experiments/EXP-2025-001.yaml --assays vit
+
+
+python scripts/run_figures.py --config configs/stats.yaml --experiment-config configs/experiments/EXP-2025-001.yaml --assays nor
+python scripts/run_figures.py --config configs/stats.yaml --experiment-config configs/experiments/EXP-2025-001.yaml --assays oft
+python scripts/run_figures.py --config configs/stats.yaml --experiment-config configs/experiments/EXP-2025-001.yaml --assays epm
+python scripts/run_figures.py --config configs/stats.yaml --experiment-config configs/experiments/EXP-2025-001.yaml --assays vit
+
+Run heteroscedasity tests:
+
+python scripts/combine_processed_and_check_heteroscedasticity.py --experiment-config configs/experiments/EXP-2025-001.yaml
+
+Run NOR individual trajectory
+
+python scripts/nor_check_individual_change.py --experiment-config configs/experiments/EXP-2025-001.yaml
+python scripts/nor_check_individual_change.py --experiment-config configs/experiments/EXP-2025-001.yaml
+
 
 To create new files/folders:
 
@@ -47,7 +63,9 @@ Get-ChildItem data\processed\LM_processed.csv | ForEach-Object { Import-Csv $_ |
 Get-ChildItem data\processed\EPM_processed.csv | ForEach-Object { Import-Csv $_ | Get-Member -MemberType NoteProperty | Select-Object -ExpandProperty Name } | Sort-Object -Unique
 Get-ChildItem data\processed\NOR_processed.csv | ForEach-Object { Import-Csv $_ | Get-Member -MemberType NoteProperty | Select-Object -ExpandProperty Name } | Sort-Object -Unique
 Get-ChildItem data\processed\OFT_processed.csv | ForEach-Object { Import-Csv $_ | Get-Member -MemberType NoteProperty | Select-Object -ExpandProperty Name } | Sort-Object -Unique
-Get-ChildItem data\processed\VIT_processed.csv | ForEach-Object { Import-Csv $_ | Get-Member -MemberType NoteProperty | Select-Object -ExpandProperty Name } | Sort-Object -Unique
+Get-ChildItem data\experiments\EXP-2025-001\raw\nor\27a_FAM_output_summary.csv | ForEach-Object { Import-Csv $_ | Get-Member -MemberType NoteProperty | Select-Object -ExpandProperty Name } | Sort-Object -Unique
+
+"C:\Users\Anjana\Projects\behaviour_stat_pipeline\data\experiments\EXP-2025-001\raw\nor\27a_FAM_output_summary.csv"
 
 For creating directories for a new experiment:
 
@@ -56,14 +74,17 @@ change experiment name
 mkdir data\experiments\EXP-2025-001\metadata
 mkdir data\experiments\EXP-2025-001\raw
 mkdir data\experiments\EXP-2025-001\interim
-mkdir data\experiments\EXP-2026-002\processed
+mkdir data\experiments\EXP-2025-001\processed
 
-mkdir data\experiments\EXP-2026-002\raw\vit
-mkdir data\experiments\EXP-2026-002\raw\nor
-mkdir data\experiments\EXP-2026-002\raw\oft
-mkdir data\experiments\EXP-2026-002\raw\epm
-mkdir data\experiments\EXP-2026-002\raw\lm
+mkdir data\experiments\EXP-2025-001\raw\vit
+mkdir data\experiments\EXP-2025-001\raw\nor
+mkdir data\experiments\EXP-2025-001\raw\oft
+mkdir data\experiments\EXP-2025-001\raw\epm
+mkdir data\experiments\EXP-2025-001\raw\lm
 
-mkdir outputs\EXP-2026-002\tables
-mkdir outputs\EXP-2026-002\figures
-mkdir outputs\EXP-2026-002\logs
+mkdir outputs\EXP-2025-001\tables
+mkdir outputs\EXP-2025-001\figures
+mkdir outputs\EXP-2025-001\logs
+
+ZIP
+Compress-Archive -Path behaviour_stat_pipeline_review -DestinationPath behaviour_stat_pipeline_review.zip -Force
