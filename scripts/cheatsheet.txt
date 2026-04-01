@@ -34,7 +34,7 @@ python scripts/nor_check_individual_change.py --experiment-config configs/experi
 To create new files/folders:
 
             New-Item -ItemType Directory -Path src\behaviour_stat_pipeline\figures -Force | Out-Null
-            New-Item -ItemType File -Path src\behaviour_stat_pipeline\figures\
+            New-Item -ItemType File -Path scripts\update_tiny_test_data.py
             New-Item -ItemType Directory -Path scripts/derive_vit_processed.py
 
 
@@ -86,5 +86,12 @@ mkdir outputs\EXP-2025-001\tables
 mkdir outputs\EXP-2025-001\figures
 mkdir outputs\EXP-2025-001\logs
 
-ZIP
-Compress-Archive -Path behaviour_stat_pipeline_review -DestinationPath behaviour_stat_pipeline_review.zip -Force
+review folder and ZIP
+powershell -ExecutionPolicy Bypass -File .\scripts\update_review_bundle.ps1 -experiment EXP-2026-002
+For a stable 4-ID sample:
+python scripts/update_tiny_test_data.py --experiment EXP-2026-002 --n 4 --seed 42 --fresh
+
+For a fresh random sample:
+python scripts/update_tiny_test_data.py --experiment EXP-2026-002 --n 4 --seed %RANDOM% --fresh
+python scripts/update_tiny_test_data.py --experiment EXP-2026-002 --n 4 --seed (Get-Random) --fresh
+
