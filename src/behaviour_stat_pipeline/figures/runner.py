@@ -244,6 +244,8 @@ def run_figures_from_config(
     processed_dir: Path,
     out_figures: Path,
     assay: str,
+    assay_config_key: str | None = None,
+    output_prefix: str | None = None,
     mouse_id_col: str = "mouse_id",
     group_col: str = "group",
     sex_col: str = "sex",
@@ -253,7 +255,8 @@ def run_figures_from_config(
         return []
 
     defaults = fig_cfg.get("defaults", {}) or {}
-
+    assay_config_key = (assay_config_key or assay).lower()
+    output_prefix = output_prefix or assay.upper()
     figure_size_cfg = defaults.get("figure_size", [5.2, 4.2])
     if not isinstance(figure_size_cfg, (list, tuple)) or len(figure_size_cfg) != 2:
         raise ValueError("figures.defaults.figure_size must be a 2-element list, e.g. [5.2, 4.2]")
@@ -308,7 +311,7 @@ def run_figures_from_config(
     auto_specs = _auto_specs_from_endpoints(
         config=config,
         fig_cfg=fig_cfg,
-        assay=assay,
+        assay=assay_config_key,
         df_columns=list(df.columns),
         label_map=label_map,
     )
@@ -316,7 +319,7 @@ def run_figures_from_config(
     auto_scatter_specs = _auto_scatter_specs_from_correlations(
         config=config,
         fig_cfg=fig_cfg,
-        assay=assay,
+        assay=assay_config_key,
         df_columns=list(df.columns),
         label_map=label_map,
     )
@@ -328,7 +331,7 @@ def run_figures_from_config(
     specs.extend([s for s in auto_specs if str(s.get("name")) not in manual_names])
 
     for spec in specs:
-        if str(spec.get("assay", "")).lower() != assay.lower():
+        if str(spec.get("assay", "")).lower() != assay_config_key.lower():
             continue
 
         plot_type = str(spec.get("type", "")).lower()
@@ -336,7 +339,7 @@ def run_figures_from_config(
             raise ValueError(f"Unsupported figure type: {spec.get('type')}")
 
         name = str(spec.get("name", f"{assay}_figure"))
-        stem = f"{assay.upper()}_{name}"
+        stem = f"{output_prefix}_{name}"
         out_paths = [out_figures / f"{stem}.{fmt}" for fmt in formats]
 
         if plot_type == "boxpoints":
@@ -395,7 +398,7 @@ def run_figures_from_config(
 
             if bool(sig_cfg.get("enabled", False)) and bool(anova_cfg.get("enabled", False)):
                 table_key = str(anova_cfg.get("table", "secondary_two_way_anova")).strip()
-                table_path = out_figures.parent / "tables" / f"{assay.upper()}_{table_key}.csv"
+                table_path = out_figures.parent / "tables" / f"{output_prefix}_{table_key}.csv"
                 if table_path.exists():
                     anova_df = pd.read_csv(table_path)
 
@@ -409,7 +412,7 @@ def run_figures_from_config(
 
             if bool(sig_cfg.get("enabled", False)) and bool(one_sample_cfg.get("enabled", False)):
                 table_key = str(one_sample_cfg.get("table", "primary_one_sample")).strip()
-                table_path = out_figures.parent / "tables" / f"{assay.upper()}_{table_key}.csv"
+                table_path = out_figures.parent / "tables" / f"{output_prefix}_{table_key}.csv"
                 if table_path.exists():
                     one_sample_df = pd.read_csv(table_path)
 

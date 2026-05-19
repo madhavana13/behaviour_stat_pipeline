@@ -364,19 +364,36 @@ def main() -> None:
 
     subjects = read_subjects(cfg.subjects_path)
 
+    base_out_tables = cfg.out_tables
+    base_out_logs = cfg.out_logs
+    base_out_figures = cfg.out_figures
+
     for assay in assays:
-        df = read_processed(cfg.processed_dir, assay)
-        df = prepare_analysis_df(df, subjects, cfg, assay)
+        assay_key = assay.upper()
 
-        run_primary_tests(df, cfg, assay)
-        run_anova(df, cfg, assay)
-        run_posthoc(df, cfg, assay)
-        run_diagnostics(df, cfg, assay)
-        run_exploratory(df, cfg, assay)
+        assay_cfg = replace(
+            cfg,
+            out_tables=base_out_tables.parent / assay_key / "tables",
+            out_logs=base_out_logs.parent / assay_key / "logs",
+            out_figures=base_out_figures.parent / assay_key / "figures",
+        )
 
-        write_summary(df, cfg, assay)
+        assay_cfg.out_tables.mkdir(parents=True, exist_ok=True)
+        assay_cfg.out_logs.mkdir(parents=True, exist_ok=True)
+        assay_cfg.out_figures.mkdir(parents=True, exist_ok=True)
 
-    print("\nDone.\n")
+        df = read_processed(assay_cfg.processed_dir, assay)
+        df = prepare_analysis_df(df, subjects, assay_cfg, assay)
+
+        run_primary_tests(df, assay_cfg, assay)
+        run_anova(df, assay_cfg, assay)
+        run_posthoc(df, assay_cfg, assay)
+        run_diagnostics(df, assay_cfg, assay)
+        run_exploratory(df, assay_cfg, assay)
+
+        write_summary(df, assay_cfg, assay)
+
+        print("\nDone.\n")
 
 
 if __name__ == "__main__":

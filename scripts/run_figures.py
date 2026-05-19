@@ -13,6 +13,24 @@ def load_yaml(path: str) -> dict:
     with open(path, "r", encoding="utf-8") as f:
         return yaml.safe_load(f) or {}
 
+def resolve_assay_identity(assay: str, exp_cfg: dict) -> tuple[str, str]:
+    """
+    Resolve user-facing assay instance to canonical assay type.
+
+    Returns:
+      assay_instance: e.g. OFT1
+      assay_type: e.g. OFT
+    """
+    requested = assay.upper()
+    instances = exp_cfg.get("assay_instances", {}) or {}
+
+    if requested in instances:
+        inst = instances[requested] or {}
+        assay_type = str(inst.get("assay_type", requested)).upper()
+        return requested, assay_type
+
+    return requested, requested
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", required=True, help="Path to YAML config (stats.yaml)")
@@ -45,12 +63,21 @@ def main() -> None:
     sex_col = factors_cfg.get("sex", {}).get("column", "sex")
 
     written_all = []
-    for assay in [a.lower() for a in args.assays]:
+    for requested_assay in args.assays:
+        assay_instance, assay_type = resolve_assay_identity(requested_assay, exp_cfg)
+
+        instance_out_figures = (
+            out_figures.parent / assay_instance.upper() / "figures"
+        )
+        instance_out_figures.mkdir(parents=True, exist_ok=True)
+
         written = run_figures_from_config(
             config=cfg,
             processed_dir=processed_dir,
-            out_figures=out_figures,
-            assay=assay,
+            out_figures=instance_out_figures,
+            assay=assay_instance.lower(),
+            assay_config_key=assay_type.lower(),
+            output_prefix=assay_instance.upper(),
             mouse_id_col=mouse_id_col,
             group_col=group_col,
             sex_col=sex_col,
