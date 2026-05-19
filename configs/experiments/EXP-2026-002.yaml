@@ -29,40 +29,40 @@ assay_patterns:
   nor: "*_output_summary.csv"
 
 assay_instances:
-  OFT:
-    assay_type: OFT
-    raw_path: data/experiments/EXP-2026-002/raw/OFT
-    session: pre
-    pattern: "*_output_summary.csv"
 
   OFT1:
     assay_type: OFT
     raw_path: data/experiments/EXP-2026-002/raw/OFT1
+    classifier_pattern: "*_Report_summary.csv"
     session: pre
     pattern: "*_output_summary.csv"
 
   OFT2:
     assay_type: OFT
     raw_path: data/experiments/EXP-2026-002/raw/OFT2
+    classifier_pattern: "*_Report_summary.csv"
     session: post
     pattern: "*_output_summary.csv"
 
   NOR:
     assay_type: NOR
     raw_path: data/experiments/EXP-2026-002/raw/nor
-    session: main
+    classifier_pattern: "*_Report_summary.csv"
+    session: pre
 
   VIT:
     assay_type: VIT
     raw_path: data/experiments/EXP-2026-002/raw/vit
-    session: main
+    classifier_pattern: "*_Report_summary.csv"
+    session: pre
 
   LM:
     assay_type: LM
     raw_path: data/experiments/EXP-2026-002/raw/lm
-    session: main
+    classifier_pattern: "*_Report_summary.csv"
+    session: post
 
   MISC:
     assay_type: MISC
     raw_path: data/experiments/EXP-2026-002/metadata/misc_raw.csv
-    session: main
+    session: post

@@ -7,10 +7,12 @@ from typing import Callable
 import pandas as pd
 
 from behaviour_stat_pipeline.io import (
+    extract_mouse_id,
     load_subjects,
     load_tracking_csv,
     merge_subject_metadata,
 )
+from behaviour_stat_pipeline.common.schema import normalize_headers
 from behaviour_stat_pipeline.common.derive import save_processed
 from behaviour_stat_pipeline.common.qc import warn_missing_subjects_coverage
 
@@ -73,6 +75,8 @@ class RunContext:
     out: str
     cfg: dict
     schema_aliases: dict
+    assay_instance: str = ""
+    session: str = ""
 
 
 class BaseAssayRunner:
@@ -104,8 +108,126 @@ class BaseAssayRunner:
         )
         df = merge_subject_metadata(df, subjects, on_missing_subjects="warn_drop")
         df["assay"] = self.assay_name
+        df["assay_type"] = self.assay_name
+        df["assay_instance"] = ""
+        df["session"] = ""
         df["source_file"] = str(f)
         return df
+    
+    def classifier_pattern(self, ctx: RunContext) -> str:
+        return str(ctx.cfg.get("classifier_pattern", "*_Report_summary.csv"))
+
+    def find_classifier_files(self, ctx: RunContext) -> list[Path]:
+        pattern = self.classifier_pattern(ctx)
+        if not pattern:
+            return []
+        return sorted(ctx.root.rglob(pattern))
+
+    def load_classifier_file(
+        self,
+        f: Path,
+        subjects: pd.DataFrame,
+        ctx: RunContext,
+    ) -> pd.DataFrame:
+        """
+        Load optional classifier/report summaries.
+
+        Expected structure:
+        - semicolon-delimited CSV
+        - a 'file' column containing a path or filename with the mouse_id
+        """
+        report = pd.read_csv(f, sep=";")
+
+        if "file" not in report.columns:
+            raise ValueError(f"Classifier/report file missing required 'file' column: {f}")
+
+        report = report.copy()
+        report["raw_id"] = report["file"].astype(str).str.strip()
+        report["mouse_id"] = report["raw_id"].apply(extract_mouse_id)
+
+        report, rename_log, suspicious = normalize_headers(
+            report,
+            assay=self.assay_name,
+            schema=ctx.schema_aliases,
+        )
+
+        if rename_log:
+            print(
+                f"[Schema] {f.name}: renamed {len(rename_log)} classifier columns "
+                f"for assay={self.assay_name}"
+            )
+            for old, new in rename_log[:20]:
+                print(f"  {old} -> {new}")
+            if len(rename_log) > 20:
+                print(f"  ... and {len(rename_log) - 20} more")
+
+        if suspicious:
+            print(
+                f"[Schema WARNING] {f.name}: suspicious classifier columns "
+                f"retained unchanged: {suspicious}"
+            )
+
+        report = merge_subject_metadata(report, subjects, on_missing_subjects="warn_drop")
+        report["assay"] = self.assay_name
+        report["assay_type"] = self.assay_name
+        report["assay_instance"] = ctx.assay_instance or self.assay_name
+        report["session"] = ctx.session or ctx.assay_instance or self.assay_name
+        report["source_file"] = str(f)
+        report["timepoint"] = getattr(self, "timepoint_label", "Single")
+
+        return report
+
+    def merge_classifier_summary(
+        self,
+        primary: pd.DataFrame,
+        classifier: pd.DataFrame,
+    ) -> pd.DataFrame:
+        key_cols = ["mouse_id", "timepoint"]
+
+        missing_keys = [c for c in key_cols if c not in primary.columns or c not in classifier.columns]
+        if missing_keys:
+            raise ValueError(
+                f"Cannot merge classifier summary for {self.assay_name}; "
+                f"missing key columns: {missing_keys}"
+            )
+
+        duplicate_cols = set(primary.columns) & set(classifier.columns)
+
+        classifier_extra_cols = key_cols + sorted(
+            c for c in classifier.columns
+            if c not in duplicate_cols and c not in {"group", "sex"}
+        )
+
+        classifier_extra = classifier[classifier_extra_cols].copy()
+
+        if classifier_extra.duplicated(subset=key_cols).any():
+            dups = classifier_extra.loc[
+                classifier_extra.duplicated(subset=key_cols, keep=False),
+                key_cols,
+            ]
+            raise ValueError(
+                f"Classifier/report rows are not unique for {self.assay_name} "
+                f"at mouse_id × timepoint:\n{dups}"
+            )
+
+        merged = primary.merge(
+            classifier_extra,
+            on=key_cols,
+            how="left",
+            validate="one_to_one",
+        )
+
+        added_cols = [c for c in classifier_extra.columns if c not in key_cols]
+        if added_cols:
+            missing_classifier = merged[added_cols].isna().all(axis=1)
+            if missing_classifier.any():
+                missing_ids = merged.loc[missing_classifier, "mouse_id"].astype(str).tolist()
+                print(
+                    f"WARNING [{self.assay_name}]: some primary rows had no matching "
+                    f"classifier/report row: {missing_ids}"
+                )
+
+        return merged
     
     def _load_session(
         self,
@@ -124,8 +246,28 @@ class BaseAssayRunner:
     
     def build_long(self, ctx: RunContext, subjects: pd.DataFrame) -> tuple[pd.DataFrame, int]:
         files = self.find_files(ctx.root, ctx.pattern)
-        dfs = [self.annotate_loaded_df(self.load_one_file(f, subjects, ctx.raw_id_col), f) for f in files]
-        return pd.concat(dfs, ignore_index=True), len(files)
+
+        dfs = []
+        for f in files:
+            df = self.load_one_file(f, subjects, ctx.raw_id_col)
+            df["assay_instance"] = ctx.assay_instance or self.assay_name
+            df["session"] = ctx.session or ctx.assay_instance or self.assay_name
+            dfs.append(self.annotate_loaded_df(df, f))
+
+        primary = pd.concat(dfs, ignore_index=True)
+
+        classifier_files = self.find_classifier_files(ctx)
+        if not classifier_files:
+            return primary, len(files)
+
+        classifier_dfs = [
+            self.load_classifier_file(f, subjects, ctx)
+            for f in classifier_files
+        ]
+        classifier = pd.concat(classifier_dfs, ignore_index=True)
+
+        merged = self.merge_classifier_summary(primary, classifier)
+        return merged, len(files) + len(classifier_files)
 
     def annotate_loaded_df(self, df: pd.DataFrame, source_file: Path) -> pd.DataFrame:
         return df
@@ -154,10 +296,12 @@ class BaseAssayRunner:
         out_path = self.output_path(ctx.out)
         out_path.parent.mkdir(parents=True, exist_ok=True)
 
+        summary_assay = ctx.assay_instance or self.assay_name
+
         res = save_processed(
             processed,
             out_csv=out_path,
-            assay=self.assay_name,
+            assay=summary_assay,
             files_n=files_n,
             extra_lines=[m for m in self.extra_summary_lines(long_df, subjects) if m],
         )

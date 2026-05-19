@@ -52,6 +52,36 @@ def load_yaml(path: str) -> dict:
     with open(path, "r", encoding="utf-8") as f:
         return yaml.safe_load(f) or {}
     
+def apply_assay_instance_aliases(cfg, exp_cfg: dict):
+    """
+    Allow assay instances such as OFT1/OFT2 to reuse endpoint/config
+    definitions from their canonical assay type, e.g. OFT.
+
+    This is runtime aliasing only: it does not modify the YAML file.
+    """
+    instances = exp_cfg.get("assay_instances", {}) or {}
+
+    dict_attrs = [
+        "within_factors",
+        "primary_one_sample_nulls",
+        "secondary_two_way_anova_endpoints",
+        "diagnostics_endpoints",
+    ]
+
+    for instance_name, inst in instances.items():
+        inst = inst or {}
+        assay_type = str(inst.get("assay_type", instance_name))
+
+        instance_key = instance_name.lower()
+        type_key = assay_type.lower()
+
+        for attr in dict_attrs:
+            d = getattr(cfg, attr, None)
+            if isinstance(d, dict) and type_key in d and instance_key not in d:
+                d[instance_key] = d[type_key]
+
+    return cfg
+    
 def log_written(path: Path) -> None:
     print(f"Wrote: {path}")
     
@@ -131,8 +161,21 @@ def run_anova(df: pd.DataFrame, cfg, assay: str) -> pd.DataFrame | None:
     if not endpoints:
         return None
 
+    available_endpoints = [ep for ep in endpoints if ep in df.columns]
+    missing_endpoints = [ep for ep in endpoints if ep not in df.columns]
+
+    if missing_endpoints:
+        print(
+            f"WARNING [{assay.upper()}]: skipping missing ANOVA endpoints: "
+            f"{missing_endpoints}"
+        )
+
+    if not available_endpoints:
+        print(f"WARNING [{assay.upper()}]: no available ANOVA endpoints; skipping ANOVA.")
+        return None
+
     frames = []
-    for ep in endpoints:
+    for ep in available_endpoints:
         frames.append(
             run_two_way_anova(
                 df,
@@ -168,10 +211,24 @@ def run_posthoc(df: pd.DataFrame, cfg, assay: str) -> None:
     if not posthoc_cfg:
         return
 
+    endpoints = cfg.secondary_two_way_anova_endpoints.get(assay, [])
+    available_endpoints = [ep for ep in endpoints if ep in df.columns]
+    missing_endpoints = [ep for ep in endpoints if ep not in df.columns]
+
+    if missing_endpoints:
+        print(
+            f"WARNING [{assay.upper()}]: skipping missing posthoc endpoints: "
+            f"{missing_endpoints}"
+        )
+
+    if not available_endpoints:
+        print(f"WARNING [{assay.upper()}]: no available posthoc endpoints; skipping posthoc.")
+        return
+
     df_posthoc = run_posthoc_cellmeans_prism(
         df=df,
         assay=assay.upper(),
-        endpoints=cfg.secondary_two_way_anova_endpoints.get(assay, []),
+        endpoints=available_endpoints,
         factors=cfg.secondary_two_way_anova_factors,
         include_interaction=cfg.secondary_two_way_anova_include_interaction,
         factor_orders=getattr(cfg, "secondary_two_way_anova_factor_orders", {}) or {},
@@ -193,11 +250,24 @@ def run_diagnostics(df: pd.DataFrame, cfg, assay: str) -> None:
     if not endpoints:
         return
 
+    available_endpoints = [ep for ep in endpoints if ep in df.columns]
+    missing_endpoints = [ep for ep in endpoints if ep not in df.columns]
+
+    if missing_endpoints:
+        print(
+            f"WARNING [{assay.upper()}]: skipping missing diagnostic endpoints: "
+            f"{missing_endpoints}"
+        )
+
+    if not available_endpoints:
+        print(f"WARNING [{assay.upper()}]: no available diagnostic endpoints; skipping diagnostics.")
+        return
+
     for grouping in cfg.diagnostics_groupings:
         diag_df, flag_df = endpoint_diagnostics(
             df,
             assay=assay.upper(),
-            endpoints=endpoints,
+            endpoints=available_endpoints,
             group_cols=grouping,
             id_col=cfg.mouse_id_col,
             min_n_test=cfg.diagnostics_min_n_test,
@@ -212,7 +282,7 @@ def run_diagnostics(df: pd.DataFrame, cfg, assay: str) -> None:
         rout_df = rout_diagnostics(
             df,
             assay=assay.upper(),
-            endpoints=endpoints,
+            endpoints=available_endpoints,
             group_cols=["group"],
             id_col=cfg.mouse_id_col,
             q=0.01,
@@ -285,7 +355,7 @@ def main() -> None:
         out_logs=Path(exp_paths.get("out_logs", cfg.out_logs)),
         out_figures=Path(exp_paths.get("out_figures", cfg.out_figures)),
     )
-
+    cfg = apply_assay_instance_aliases(cfg, exp_cfg)
     assays = cfg.assays if args.assays is None else [a.lower() for a in args.assays]
 
     cfg.out_tables.mkdir(parents=True, exist_ok=True)

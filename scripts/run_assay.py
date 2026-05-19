@@ -34,9 +34,33 @@ def load_yaml(path: str) -> dict:
     with open(path, "r", encoding="utf-8") as f:
         return yaml.safe_load(f) or {}
 
+def resolve_assay_identity(args: argparse.Namespace, exp_cfg: dict) -> tuple[str, str, str]:
+    """
+    Resolve a user-facing assay argument into:
+      - assay_instance: output/provenance name, e.g. OFT1
+      - assay_type: canonical registered runner name, e.g. OFT
+      - session: optional human-readable session label, defaults to assay_instance
+    """
+    requested = args.assay.upper()
+    instances = exp_cfg.get("assay_instances", {}) or {}
 
-def resolve_assay_inputs(args: argparse.Namespace, shared_cfg: dict, exp_cfg: dict) -> tuple[Path, str, str, str]:
-    assay_key = args.assay.lower()
+    if requested in instances:
+        inst = instances[requested] or {}
+        assay_type = str(inst.get("assay_type", requested)).upper()
+        session = str(inst.get("session", requested))
+        return requested, assay_type, session
+
+    return requested, requested, requested
+
+def resolve_assay_inputs(
+    args: argparse.Namespace,
+    shared_cfg: dict,
+    exp_cfg: dict,
+    assay_instance: str,
+    assay_type: str,
+) -> tuple[Path, str, str, str]:
+    instance_key = assay_instance.lower()
+    type_key = assay_type.lower()
 
     exp_paths = exp_cfg.get("paths", {})
     exp_raw = exp_cfg.get("raw", {})
@@ -44,12 +68,17 @@ def resolve_assay_inputs(args: argparse.Namespace, shared_cfg: dict, exp_cfg: di
     misc_cfg = shared_cfg.get("misc", {})
 
     subjects = args.subjects or exp_paths.get("metadata_subjects", "data/metadata/subjects.csv")
-    out = args.out or str(Path(exp_paths.get("processed_dir", "data/processed")) / f"{args.assay.upper()}_processed.csv")
+    out = args.out or str(
+    Path(exp_paths.get("processed_dir", "data/processed"))
+    / f"{assay_instance.upper()}_processed.csv"
+)
 
-    if assay_key == "misc":
+    if type_key == "misc":
         raw_file = (
             args.root
-            or exp_raw.get("misc", "")
+            or (exp_cfg.get("assay_instances", {}).get(assay_instance, {}) or {}).get("raw_path", "")
+            or exp_raw.get(instance_key, "")
+            or exp_raw.get(type_key, "")
             or misc_cfg.get("raw_file", "")
         )
         if not raw_file:
@@ -60,37 +89,43 @@ def resolve_assay_inputs(args: argparse.Namespace, shared_cfg: dict, exp_cfg: di
             )
         return Path(raw_file), "", subjects, out
 
-    root = args.root or exp_raw.get(assay_key, "")
+    instance_cfg = (exp_cfg.get("assay_instances", {}).get(assay_instance, {}) or {})
+    root = args.root or instance_cfg.get("raw_path", "") or exp_raw.get(instance_key, "") or exp_raw.get(type_key, "")
     if not root:
         raise ValueError(
             f"No raw root provided for assay '{args.assay}'. "
             f"Use --root or define raw.{assay_key} in experiment config."
         )
 
-    pattern = args.pattern or exp_patterns.get(assay_key, "*_output_summary.csv")
+    pattern = args.pattern or instance_cfg.get("pattern", "") or exp_patterns.get(instance_key, "") or exp_patterns.get(type_key, "*_output_summary.csv")
     return Path(root), pattern, subjects, out
 
 
 def main() -> None:
     ap = build_parser()
     args = ap.parse_args()
-    assay_key = args.assay.upper()
-
-    if assay_key not in RUNNER_REGISTRY:
-        raise ValueError(
-            f"Invalid assay '{args.assay}'. Must be one of {list(RUNNER_REGISTRY.keys())}"
-        )
-
-    args.assay = assay_key
-
     shared_cfg = load_yaml(args.config)
     exp_cfg = load_yaml(args.experiment_config)
+
+    assay_instance, assay_type, session = resolve_assay_identity(args, exp_cfg)
+
+    if assay_type not in RUNNER_REGISTRY:
+        raise ValueError(
+            f"Invalid assay type '{assay_type}' resolved from '{args.assay}'. "
+            f"Must be one of {list(RUNNER_REGISTRY.keys())}"
+        )
 
     # For now, pass shared config into the runner because that's where
     # subjects validation is currently read from.
     cfg = shared_cfg.copy()
 
-    root, pattern, subjects, out = resolve_assay_inputs(args, shared_cfg, exp_cfg)
+    root, pattern, subjects, out = resolve_assay_inputs(
+    args,
+    shared_cfg,
+    exp_cfg,
+    assay_instance=assay_instance,
+    assay_type=assay_type,
+    )
 
     ctx = RunContext(
         root=root,
@@ -100,9 +135,11 @@ def main() -> None:
         out=out,
         cfg=cfg,
         schema_aliases=schema_aliases,
+        assay_instance=assay_instance,
+        session=session,
     )
 
-    RUNNER_REGISTRY[args.assay].run(ctx)
+    RUNNER_REGISTRY[assay_type].run(ctx)
 
 
 if __name__ == "__main__":

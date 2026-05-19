@@ -111,12 +111,12 @@ diagnostics:
       - time_in_center
       - distance_moved_in_center
       - time_in_corners
-      - Supportedrearing_time
-      - Supportedrearing_count
-      - Unsupportedrearing_time
-      - Unsupportedrearing_count
-      - Grooming_time
-      - Grooming_count
+      - supported_rearing_time
+      - supported_rearing_count
+      - unsupported_rearing_time
+      - unsupported_rearing_count
+      - grooming_time
+      - grooming_count
     epm: 
       - count_head_dips
       - count_psap

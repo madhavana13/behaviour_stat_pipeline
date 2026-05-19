@@ -24,7 +24,14 @@ vit:
     "average speed in right lower quadrant": "average_speed_in_right_lower_quadrant"
     "transitions into right lower quadrant": "transitions_into_right_lower_quadrant"
     "time of nose in right lower quadrant": "time_of_nose_in_right_lower_quadrant"
-
+    "classifications.Supportedrearing.time": "supported_rearing_time"
+    "classifications.Supportedrearing.count": "supported_rearing_count"
+    "classifications.Unsupportedrearing.time": "unsupported_rearing_time"
+    "classifications.Unsupportedrearing.count": "unsupported_rearing_count"
+    "classifications.Grooming.time": "grooming_time"
+    "classifications.Grooming.count": "grooming_count"
+    "classifications.Digging.time": "digging_time"
+    "classifications.Digging.count": "digging_count"
 
 
 nor:
@@ -50,7 +57,14 @@ nor:
     "time in interaction zone of lego_tower_1": "time_in_interaction_zone_of_lego_tower_1"
     "time in interaction zone of lego tower_0": "time_in_interaction_zone_of_lego_tower_0"
     "time in interaction zone of lego tower_1": "time_in_interaction_zone_of_lego_tower_1"
-
+    "classifications.Supportedrearing.time": "supported_rearing_time"
+    "classifications.Supportedrearing.count": "supported_rearing_count"
+    "classifications.Unsupportedrearing.time": "unsupported_rearing_time"
+    "classifications.Unsupportedrearing.count": "unsupported_rearing_count"
+    "classifications.Grooming.time": "grooming_time"
+    "classifications.Grooming.count": "grooming_count"
+    "classifications.Digging.time": "digging_time"
+    "classifications.Digging.count": "digging_count"
 oft:
   raw:
     "average speed": "mean_speed"
@@ -69,10 +83,33 @@ oft:
     "average speed in corners": "average_speed_in_corners"
     "transitions into corners": "transitions_into_corners"
     "Supported rearing time": "supported_rearing_time"
+    "Supportedrearing_time": "supported_rearing_time"
+    "supportedrearing_time": "supported_rearing_time"
     "Supported rearing count": "supported_rearing_count"
+    "Supportedrearing_count": "supported_rearing_count"
+    "supportedrearing_count": "supported_rearing_count"
     "Unsupported rearing time": "unsupported_rearing_time"
+    "Unsupportedrearing_time": "unsupported_rearing_time"
+    "unsupportedrearing_time": "unsupported_rearing_time"
     "Unsupported rearing count": "unsupported_rearing_count"
-
+    "Unsupportedrearing_count": "unsupported_rearing_count"
+    "unsupportedrearing_count": "unsupported_rearing_count"
+    "Digging time": "digging_time"
+    "Digging_time": "digging_time"
+    "Digging count": "digging_count"
+    "Digging_count": "digging_count"
+    "Grooming time": "grooming_time"
+    "Grooming_time": "grooming_time"
+    "Grooming count": "grooming_count"
+    "Grooming_count": "grooming_count"
+    "classifications.Supportedrearing.time": "supported_rearing_time"
+    "classifications.Supportedrearing.count": "supported_rearing_count"
+    "classifications.Unsupportedrearing.time": "unsupported_rearing_time"
+    "classifications.Unsupportedrearing.count": "unsupported_rearing_count"
+    "classifications.Grooming.time": "grooming_time"
+    "classifications.Grooming.count": "grooming_count"
+    "classifications.Digging.time": "digging_time"
+    "classifications.Digging.count": "digging_count"
 
 epm:
   raw:
@@ -94,7 +131,14 @@ epm:
     "count head dips": "count_head_dips"
     "time psap": "time_psap"
     "count psap": "count_psap"
-
+    "classifications.Supportedrearing.time": "supported_rearing_time"
+    "classifications.Supportedrearing.count": "supported_rearing_count"
+    "classifications.Unsupportedrearing.time": "unsupported_rearing_time"
+    "classifications.Unsupportedrearing.count": "unsupported_rearing_count"
+    "classifications.Grooming.time": "grooming_time"
+    "classifications.Grooming.count": "grooming_count"
+    "classifications.Digging.time": "digging_time"
+    "classifications.Digging.count": "digging_count"
 lm:
   raw:
     "average speed": "mean_speed"
@@ -113,7 +157,14 @@ lm:
     "transitions into narrow alley": "transitions_into_narrow_alley"
     "latency to enter narrow alley": "latency_to_enter_narrow_alley"
     "latency to re-enter narrow alley": "latency_to_re_enter_narrow_alley"
-
+    "classifications.Supportedrearing.time": "supported_rearing_time"
+    "classifications.Supportedrearing.count": "supported_rearing_count"
+    "classifications.Unsupportedrearing.time": "unsupported_rearing_time"
+    "classifications.Unsupportedrearing.count": "unsupported_rearing_count"
+    "classifications.Grooming.time": "grooming_time"
+    "classifications.Grooming.count": "grooming_count"
+    "classifications.Digging.time": "digging_time"
+    "classifications.Digging.count": "digging_count"
 
 sit:
   raw: {}
