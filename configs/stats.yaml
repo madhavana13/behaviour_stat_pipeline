@@ -332,6 +332,31 @@ figures:
       - "test_novel_iz_time"
 
   defaults:
+
+    x_margin: 0.20
+    title_pad: 12
+    group_label_y: -0.05
+    ylim_top_mult: 1.25
+    group_gap: 0.6   # or 0.5 or 0.4
+    box_width: 0.10
+    x_gap: 0.6
+    sex_dodge: 0.05
+    figure_size: [5.0, 4.6]
+    dpi: 300
+    jitter_sd: 0.06
+    point_size: 14
+    point_alpha: 0.85
+
+    #DI
+
+    di_ylim: [-1.0, 1.0]
+    di_zero_line: true
+    di_zero_linewidth: 1.0
+    di_zero_linestyle: "--"
+    di_ticks: [-1.0, -0.5, 0.0, 0.5, 1.0]
+    one_sample_text_position: "top_left"
+    one_sample_fontsize: 10
+
     group_edgecolors:
       tail: "black"
       cup: "darkorange"
@@ -352,18 +377,7 @@ figures:
       timepoint:
         Total: ""
 
-    group_gap: 0.02
-    box_width: 0.20
-    x_gap: 0.6
-    sex_dodge: 0.05
-    figure_size: [5.2, 4.2]
-    dpi: 300
-
-    group_order: ["tail", "cup", "one", "two", "control", "stressed", "IFS"]
-
-    jitter_sd: 0.06
-    point_size: 14
-    point_alpha: 0.85
+    group_order: ["tail", "cup", "one", "two", "control", "stressed", "ifs"]
 
     significance:
       enabled: true
@@ -373,7 +387,7 @@ figures:
         endpoint_col: "endpoint"
         term_col: "term"
         label_col: "significance_label"
-        y_pad_frac: 0.08
+        y_pad_frac: 0.12
         h_frac: 0.035
         linewidth: 1.2
         title_buffer_frac: 0.12
@@ -383,6 +397,13 @@ figures:
           group: "bracket"
           sex: "text"
           interaction: "text"
+
+      one_sample_summary:
+        enabled: true
+        table: "primary_one_sample"
+        endpoint_col: "endpoint"
+        group_col: "group"
+        label_col: "t_p_adj_holm"
 
     formats: ["png"]
 

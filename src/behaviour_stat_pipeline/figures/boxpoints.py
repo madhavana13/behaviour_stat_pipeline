@@ -9,6 +9,46 @@ import pandas as pd
 
 from .common import PlotStyle, infer_order, jitter_from_ids, require_columns
 
+def _is_di_endpoint(endpoint: str) -> bool:
+    e = str(endpoint).strip().lower()
+    return e.startswith("di_") or e.endswith("_di") or e == "di"
+
+def _draw_corner_text(ax, text: str, position: str = "top_left", fontsize: float = 10.0) -> None:
+    if not text:
+        return
+
+    if position == "top_right":
+        x, ha = 0.98, "right"
+    else:
+        x, ha = 0.02, "left"
+
+    ax.text(
+        x,
+        0.98,
+        text,
+        transform=ax.transAxes,
+        ha=ha,
+        va="top",
+        fontsize=fontsize,
+    )
+
+def _collect_one_sample_labels(
+    one_sample_df: pd.DataFrame,
+    *,
+    endpoint: str,
+    endpoint_col: str,
+    group_col: str,
+    label_col: str,
+) -> dict:
+    out = {}
+    sub = one_sample_df[one_sample_df[endpoint_col].astype(str) == str(endpoint)].copy()
+    if sub.empty:
+        return out
+
+    for _, r in sub.iterrows():
+        g = str(r[group_col])
+        out[g] = _stars_from_pvalue(r[label_col])
+    return out  
 
 def _parse_term_to_key(term: str) -> str:
     """
@@ -46,6 +86,19 @@ def _stars_from_label(label: str) -> str:
         return s
     return ""
 
+def _stars_from_pvalue(p) -> str:
+    if pd.isna(p):
+        return "ns"
+    p = float(p)
+    if p < 1e-4:
+        return "****"
+    if p < 1e-3:
+        return "***"
+    if p < 1e-2:
+        return "**"
+    if p < 0.05:
+        return "*"
+    return "ns"
 
 def _label_from_significance(label: str) -> str:
     """
@@ -116,7 +169,7 @@ def _draw_anova_text_lines(
     text = "\n".join(lines)
     ax.text(
         x,
-        1.03,  # outside plotting area
+        0.98,  # outside plotting area
         text,
         transform=ax.transAxes,
         ha=ha,
@@ -147,6 +200,8 @@ def plot_group_boxpoints(
     show: bool = False,
     anova_df: Optional[pd.DataFrame] = None,
     anova_cfg: Optional[dict] = None,
+    one_sample_df: Optional[pd.DataFrame] = None,
+    one_sample_cfg: Optional[dict] = None,
 ) -> None:
     """
     Draw Prism-like box+whisker plots with individual points:
@@ -187,7 +242,7 @@ def plot_group_boxpoints(
 
     if n_x == 1:
         # true center-to-center spacing controlled directly by group_gap
-        step = 1.0 + style.group_gap
+        step = style.group_gap
         x = x_levels[0]
         for gi, g in enumerate(g_levels):
             pos = base + gi * step
@@ -199,14 +254,18 @@ def plot_group_boxpoints(
         # between-group spacing = group_gap
         group_block_width = (n_x - 1) * style.x_gap
         for gi, g in enumerate(g_levels):
-            block_start = base + gi * (group_block_width + style.group_gap + 1.0)
+            block_start = base + gi * (group_block_width + style.group_gap)
             for xi, x in enumerate(x_levels):
                 pos = block_start + xi * style.x_gap
                 positions[(g, x)] = pos
                 xticks.append(pos)
                 xticklabels.append(str(x))
 
-    fig, ax = plt.subplots(figsize=(5.2, 4.2), dpi=300)
+    center_shift = (max(xticks) + min(xticks)) / 2
+    xticks = [x - center_shift for x in xticks]
+    positions = {(g, x): pos - center_shift for (g, x), pos in positions.items()}
+
+    fig, ax = plt.subplots(figsize=style.figure_size, dpi=style.dpi)
 
     for g in g_levels:
         edge = style.group_edgecolors.get(str(g).lower(), "black")
@@ -275,7 +334,7 @@ def plot_group_boxpoints(
 
         ax.text(
             center,
-            -0.12,
+            style.group_label_y,
             label,
             ha="center",
             va="top",
@@ -284,9 +343,12 @@ def plot_group_boxpoints(
             clip_on=False,
         )
 
-    ax.set_title(title or f"{assay} — {endpoint}", fontsize=12, pad=18)
+    ax.set_title(title or f"{assay} — {endpoint}", fontsize=12, pad=style.title_pad)
     ax.set_ylabel(y_label or endpoint)
     ax.set_xlabel("")
+
+    plot_key = anova_endpoint if anova_endpoint else endpoint
+    is_di = _is_di_endpoint(plot_key)
 
     # --- ANOVA annotation (group / sex / interaction) ---
     if (
@@ -307,7 +369,7 @@ def plot_group_boxpoints(
         text_position = str(anova_cfg.get("position", "top_right"))
         text_fontsize = float(anova_cfg.get("fontsize", 10))
 
-        key = anova_endpoint if anova_endpoint else endpoint
+        key = plot_key
         sub = anova_df[anova_df[endpoint_col].astype(str) == str(key)]
 
         text_lines: List[str] = []
@@ -368,14 +430,52 @@ def plot_group_boxpoints(
     ax.spines["bottom"].set_linewidth(2)
     ax.tick_params(width=1)
 
-    ymax = float(d[value_col].max())
-    ymin = float(d[value_col].min())
+    if is_di and one_sample_cfg and bool(one_sample_cfg.get("enabled", False)) and one_sample_df is not None and not one_sample_df.empty:
+        endpoint_col = str(one_sample_cfg.get("endpoint_col", "endpoint"))
+        group_col_os = str(one_sample_cfg.get("group_col", "group"))
+        label_col = str(one_sample_cfg.get("label_col", "t_p_adj_holm"))
 
-    # keep zero baseline, but reserve annotation room above data
-    top = ymax * 1.38 if ymax > 0 else 1.0
-    ax.set_ylim(0, top)
-    xmin = min(xticks) - 0.45
-    xmax = max(xticks) + 0.45
+        labels = _collect_one_sample_labels(
+            one_sample_df,
+            endpoint=plot_key,
+            endpoint_col=endpoint_col,
+            group_col=group_col_os,
+            label_col=label_col,
+        )
+
+        if labels:
+            ordered = []
+            for g in g_levels:
+                lab = labels.get(str(g))
+                if lab is not None:
+                    ordered.append(f"{str(g)}: {lab}")
+            if ordered:
+                _draw_corner_text(
+                    ax,
+                    "\n".join(ordered),
+                    position=style.one_sample_text_position,
+                    fontsize=style.one_sample_fontsize,
+                )
+
+    # --- DI-specific axis handling ---
+    if is_di:
+        ax.set_ylim(-1.0, 1.0)
+        ax.set_yticks([-1.0, -0.5, 0.0, 0.5, 1.0])
+        ax.axhline(
+            0.0,
+            linewidth=1.0,
+            linestyle="--",
+            color="grey",
+            alpha=0.8,
+            zorder=1,
+        )
+    else:
+        ymax = float(d[value_col].max())
+        top = ymax * style.ylim_top_mult if ymax > 0 else 1.0
+        ax.set_ylim(0, top)
+
+    xmin = min(xticks) - style.x_margin
+    xmax = max(xticks) + style.x_margin
     ax.set_xlim(xmin, xmax)
     fig.tight_layout(rect=[0, 0, 1, 0.92])
 

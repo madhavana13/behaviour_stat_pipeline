@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-import pandas as pd
 import re
-
 from pathlib import Path
 from typing import Any, Dict, List
 
-from .common import PlotStyle, require_columns
+import pandas as pd
+
 from .boxpoints import plot_group_boxpoints
+from .common import PlotStyle, require_columns
 from .scatter import plot_group_scatter
 
 
@@ -18,11 +18,6 @@ def _make_long_from_mapping(
     mapping: Dict[str, str],
     id_cols: List[str],
 ) -> pd.DataFrame:
-    """
-    Convert wide columns into long:
-      mapping: {x_level: wide_column_name}
-    Produces columns: id_cols + [x_col, "value"]
-    """
     for label, col in mapping.items():
         if col not in df.columns:
             raise ValueError(f"Column '{col}' not found in processed data.")
@@ -35,6 +30,7 @@ def _make_long_from_mapping(
         pieces.append(tmp)
 
     return pd.concat(pieces, axis=0, ignore_index=True)
+
 
 def _load_label_map(cfg):
     paths = cfg.get("paths", {}) or {}
@@ -52,11 +48,8 @@ def _load_label_map(cfg):
     df["endpoint"] = df["endpoint"].astype(str)
     return df
 
+
 def _label_for_axis(label_map: pd.DataFrame | None, assay: str, endpoint: str) -> str | None:
-    """
-    Return axis label for a column (e.g., 'Time (s)') from labels.csv.y_label.
-    Falls back to None if not found.
-    """
     if label_map is None:
         return None
     m = label_map[(label_map["assay"] == assay.lower()) & (label_map["endpoint"] == str(endpoint))]
@@ -67,10 +60,6 @@ def _label_for_axis(label_map: pd.DataFrame | None, assay: str, endpoint: str) -
 
 
 def _label_for_title(label_map: pd.DataFrame | None, assay: str, endpoint: str) -> str | None:
-    """
-    Return human title for a column (e.g., 'Time in central alley') from labels.csv.title.
-    Falls back to None if not found.
-    """
     if label_map is None:
         return None
     m = label_map[(label_map["assay"] == assay.lower()) & (label_map["endpoint"] == str(endpoint))]
@@ -78,6 +67,7 @@ def _label_for_title(label_map: pd.DataFrame | None, assay: str, endpoint: str) 
         return None
     v = m.iloc[0].get("title", None)
     return None if pd.isna(v) else str(v)
+
 
 def _auto_specs_from_endpoints(
     *,
@@ -87,16 +77,6 @@ def _auto_specs_from_endpoints(
     df_columns: List[str],
     label_map=None,
 ) -> List[Dict[str, Any]]:
-    """
-    Generate simple boxpoints specs for each endpoint in the chosen endpoint list.
-
-    Generated plots are single-column "Total" plots:
-      wide_to_long:
-        x_col: ["ALL"]
-        mapping: {"ALL": endpoint}
-
-    Multi-column plots (e.g., Familiar vs Novel) are NOT inferred here by design.
-    """
     auto = fig_cfg.get("auto_from_endpoints", {}) or {}
     if not auto.get("enabled", False):
         return []
@@ -104,7 +84,6 @@ def _auto_specs_from_endpoints(
     source = str(auto.get("source", "secondary_two_way_anova")).strip()
     exclude = set([str(x) for x in (auto.get("exclude", []) or [])])
 
-    # Pull endpoints from config
     if source not in config:
         raise ValueError(f"figures.auto_from_endpoints.source='{source}' not found in config")
     endpoints_by_assay = (config.get(source, {}) or {}).get("endpoints", {}) or {}
@@ -113,7 +92,6 @@ def _auto_specs_from_endpoints(
     if not isinstance(endpoints, list):
         raise ValueError(f"{source}.endpoints.{assay} must be a list")
 
-    # Validate existence in df (fail fast = reproducible)
     missing = [e for e in endpoints if str(e) not in df_columns and str(e) not in exclude]
     if missing:
         raise ValueError(
@@ -159,6 +137,8 @@ def _auto_specs_from_endpoints(
         )
 
     return out_specs
+
+
 def _slug(s: str) -> str:
     s = str(s).lower().strip()
     s = re.sub(r"\s+", "_", s)
@@ -167,12 +147,6 @@ def _slug(s: str) -> str:
 
 
 def _resolve_corr_specs_for_figures(cfg: Dict[str, Any], assay: str) -> List[Dict[str, Any]]:
-    """
-    Resolve correlation specs similarly to stats-side shorthand:
-    - apply correlations.defaults
-    - replace groupings:null with default_groupings
-    - auto-name if missing
-    """
     corr = (cfg.get("correlations", {}) or {})
     defaults = (corr.get("defaults", {}) or {})
     default_groupings = (corr.get("default_groupings", [[]]) or [[]])
@@ -198,7 +172,6 @@ def _resolve_corr_specs_for_figures(cfg: Dict[str, Any], assay: str) -> List[Dic
         if not out.get("name"):
             out["name"] = f"{assay.lower()}_{_slug(out['x'])}_vs_{_slug(out['y'])}"
 
-        # minimal required keys
         for k in ["name", "assay", "x", "y"]:
             if k not in out:
                 raise ValueError(f"Resolved correlations spec missing key '{k}'")
@@ -237,7 +210,6 @@ def _auto_scatter_specs_from_correlations(
         x = str(cs["x"])
         y = str(cs["y"])
 
-        # fail fast: figures should not silently skip missing schema
         missing = [c for c in [x, y] if c not in df_columns]
         if missing:
             raise ValueError(f"[figures:auto_from_correlations] {assay}:{name} missing columns: {missing}")
@@ -263,8 +235,8 @@ def _auto_scatter_specs_from_correlations(
             }
         )
 
-
     return out_specs
+
 
 def run_figures_from_config(
     *,
@@ -276,15 +248,15 @@ def run_figures_from_config(
     group_col: str = "group",
     sex_col: str = "sex",
 ) -> List[Path]:
-    """
-    Generate figures for one assay based on a config dict.
-    Returns list of written figure paths.
-    """
     fig_cfg = config.get("figures", {})
     if not fig_cfg or not fig_cfg.get("enabled", False):
         return []
 
-    defaults = fig_cfg.get("defaults", {})
+    defaults = fig_cfg.get("defaults", {}) or {}
+
+    figure_size_cfg = defaults.get("figure_size", [5.2, 4.2])
+    if not isinstance(figure_size_cfg, (list, tuple)) or len(figure_size_cfg) != 2:
+        raise ValueError("figures.defaults.figure_size must be a 2-element list, e.g. [5.2, 4.2]")
 
     style = PlotStyle(
         group_edgecolors=defaults.get("group_edgecolors", {}),
@@ -296,6 +268,19 @@ def run_figures_from_config(
         point_size=float(defaults.get("point_size", 28.0)),
         x_gap=float(defaults.get("x_gap", 0.8)),
         point_alpha=float(defaults.get("point_alpha", 0.9)),
+        figure_size=(float(figure_size_cfg[0]), float(figure_size_cfg[1])),
+        dpi=int(defaults.get("dpi", 300)),
+        x_margin=float(defaults.get("x_margin", 0.45)),
+        title_pad=float(defaults.get("title_pad", 18.0)),
+        group_label_y=float(defaults.get("group_label_y", -0.12)),
+        ylim_top_mult=float(defaults.get("ylim_top_mult", 1.38)),
+        di_ylim=tuple(defaults.get("di_ylim", [-1.0, 1.0])),
+        di_zero_line=bool(defaults.get("di_zero_line", True)),
+        di_zero_linewidth=float(defaults.get("di_zero_linewidth", 1.0)),
+        di_zero_linestyle=str(defaults.get("di_zero_linestyle", "--")),
+        di_ticks=tuple(defaults.get("di_ticks", [-1.0, -0.5, 0.0, 0.5, 1.0])),
+        one_sample_text_position=str(defaults.get("one_sample_text_position", "top_left")),
+        one_sample_fontsize=float(defaults.get("one_sample_fontsize", 10.0)),
     )
 
     formats = defaults.get("formats", ["png"])
@@ -306,7 +291,6 @@ def run_figures_from_config(
         if fmt not in ("png", "pdf"):
             raise ValueError(f"Unsupported format: {fmt}")
 
-    # load processed data
     processed_path = processed_dir / f"{assay.upper()}_processed.csv"
     if not processed_path.exists():
         raise FileNotFoundError(f"Processed file not found: {processed_path}")
@@ -316,12 +300,11 @@ def run_figures_from_config(
 
     written: List[Path] = []
     label_map = _load_label_map(config)
-    # Start with manually defined specs
+
     specs = fig_cfg.get("specs", []) or []
     if not isinstance(specs, list):
         raise ValueError("figures.specs must be a list")
 
-    # Add auto-generated specs from endpoint lists (single-column Total plots)
     auto_specs = _auto_specs_from_endpoints(
         config=config,
         fig_cfg=fig_cfg,
@@ -330,7 +313,6 @@ def run_figures_from_config(
         label_map=label_map,
     )
 
-    # Add auto-generated scatter specs from correlations.specs
     auto_scatter_specs = _auto_scatter_specs_from_correlations(
         config=config,
         fig_cfg=fig_cfg,
@@ -342,28 +324,24 @@ def run_figures_from_config(
     manual_names = {str(s.get("name")) for s in specs if isinstance(s, dict) and "name" in s}
     specs.extend([s for s in auto_scatter_specs if str(s.get("name")) not in manual_names])
 
-    # Avoid duplicates: manual specs win if names collide
     manual_names = {str(s.get("name")) for s in specs if isinstance(s, dict) and "name" in s}
     specs.extend([s for s in auto_specs if str(s.get("name")) not in manual_names])
 
     for spec in specs:
         if str(spec.get("assay", "")).lower() != assay.lower():
             continue
+
         plot_type = str(spec.get("type", "")).lower()
         if plot_type not in ("boxpoints", "scatter"):
             raise ValueError(f"Unsupported figure type: {spec.get('type')}")
 
         name = str(spec.get("name", f"{assay}_figure"))
-
-        # Output paths (same for all plot types)
         stem = f"{assay.upper()}_{name}"
         out_paths = [out_figures / f"{stem}.{fmt}" for fmt in formats]
 
         if plot_type == "boxpoints":
             value_label = spec.get("value_label", None)
             x_order = spec.get("x_order", None)
-
-            # Prefer per-spec order, else fall back to figures.defaults.group_order
             group_order = spec.get("group_order", defaults.get("group_order", None))
             sex_order = spec.get("sex_order", ["female", "male"])
 
@@ -376,11 +354,9 @@ def run_figures_from_config(
             if not isinstance(mapping, dict) or not mapping:
                 raise ValueError(f"Figure spec '{name}' wide_to_long.mapping must be a non-empty dict.")
 
-            # Build long data
             id_cols = [mouse_id_col, group_col, sex_col]
             long_df = _make_long_from_mapping(df, x_col=x_col, mapping=mapping, id_cols=id_cols)
 
-            # --- style overrides ---
             style_spec = PlotStyle(
                 group_edgecolors=style.group_edgecolors,
                 sex_markers=style.sex_markers,
@@ -395,9 +371,22 @@ def run_figures_from_config(
                 sex_dodge=float(spec.get("sex_dodge", style.sex_dodge)),
                 x_gap=float(spec.get("x_gap", style.x_gap)),
                 group_gap=float(spec.get("group_gap", style.group_gap)),
+                figure_size=tuple(spec.get("figure_size", style.figure_size)),
+                dpi=int(spec.get("dpi", style.dpi)),
+                x_margin=float(spec.get("x_margin", style.x_margin)),
+                title_pad=float(spec.get("title_pad", style.title_pad)),
+                group_label_y=float(spec.get("group_label_y", style.group_label_y)),
+                ylim_top_mult=float(spec.get("ylim_top_mult", style.ylim_top_mult)),
+                di_ylim=tuple(spec.get("di_ylim", style.di_ylim)),
+                di_zero_line=bool(spec.get("di_zero_line", style.di_zero_line)),
+                di_zero_linewidth=float(spec.get("di_zero_linewidth", style.di_zero_linewidth)),
+                di_zero_linestyle=str(spec.get("di_zero_linestyle", style.di_zero_linestyle)),
+                di_ticks=tuple(spec.get("di_ticks", style.di_ticks)),
+                one_sample_text_position=str(spec.get("one_sample_text_position", style.one_sample_text_position)),
+                one_sample_fontsize=float(spec.get("one_sample_fontsize", style.one_sample_fontsize)),
+                
             )
 
-            # --- optional ANOVA-based significance annotation (main effects only) ---
             sig_cfg = (defaults.get("significance", {}) or {}).copy()
             sig_cfg.update(spec.get("significance", {}) or {})
 
@@ -407,19 +396,22 @@ def run_figures_from_config(
             if bool(sig_cfg.get("enabled", False)) and bool(anova_cfg.get("enabled", False)):
                 table_key = str(anova_cfg.get("table", "secondary_two_way_anova")).strip()
                 table_path = out_figures.parent / "tables" / f"{assay.upper()}_{table_key}.csv"
-
                 if table_path.exists():
                     anova_df = pd.read_csv(table_path)
 
-            else:
-                anova_df = None
-
-            # --- draw plot ---
             anova_endpoint = None
-            mapped = list(mapping.values())
-            mapped = [str(m) for m in mapped if m is not None]
+            mapped = [str(m) for m in mapping.values() if m is not None]
             if len(set(mapped)) == 1:
                 anova_endpoint = mapped[0]
+
+            one_sample_df = None
+            one_sample_cfg = (sig_cfg.get("one_sample_summary", {}) or {}).copy()
+
+            if bool(sig_cfg.get("enabled", False)) and bool(one_sample_cfg.get("enabled", False)):
+                table_key = str(one_sample_cfg.get("table", "primary_one_sample")).strip()
+                table_path = out_figures.parent / "tables" / f"{assay.upper()}_{table_key}.csv"
+                if table_path.exists():
+                    one_sample_df = pd.read_csv(table_path)
 
             plot_group_boxpoints(
                 df=long_df,
@@ -441,10 +433,11 @@ def run_figures_from_config(
                 show=False,
                 anova_df=anova_df,
                 anova_cfg=anova_cfg,
+                one_sample_df=one_sample_df,
+                one_sample_cfg=one_sample_cfg,
             )
 
             written.extend(out_paths)
-
 
         elif plot_type == "scatter":
             x = spec.get("x")
@@ -469,8 +462,9 @@ def run_figures_from_config(
                     x_label=spec.get("x_label", None) or (_label_for_axis(label_map, assay, str(x)) or str(x)),
                     y_label=spec.get("y_label", None) or (_label_for_axis(label_map, assay, str(y)) or str(y)),
                     title=spec.get("title", None) or (
-                        f"{_label_for_title(label_map, assay, str(y)) or str(y)} vs {_label_for_title(label_map, assay, str(x)) or str(x)}"
-),
+                        f"{_label_for_title(label_map, assay, str(y)) or str(y)} vs "
+                        f"{_label_for_title(label_map, assay, str(x)) or str(x)}"
+                    ),
                     fit_enabled=fit_enabled,
                 )
 
