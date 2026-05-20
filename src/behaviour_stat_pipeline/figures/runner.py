@@ -124,9 +124,13 @@ def _auto_specs_from_endpoints(
                     else endpoint
                 ),
                 "title": (
-                    row["title"]
-                    if row is not None and pd.notna(row["title"])
-                    else None
+                    False
+                    if not bool(fig_cfg.get("auto_from_endpoints", {}).get("show_titles", False))
+                    else (
+                        row["title"]
+                        if row is not None and pd.notna(row["title"])
+                        else None
+                    )
                 ),
                 "x_order": [""],
                 "wide_to_long": {
@@ -265,6 +269,10 @@ def run_figures_from_config(
         group_edgecolors=defaults.get("group_edgecolors", {}),
         sex_markers=defaults.get("sex_markers", {}),
         group_gap=float(defaults.get("group_gap", 0.6)),
+        box_linewidth=float(defaults.get("box_linewidth", 1.1)),
+        median_linewidth=float(defaults.get("median_linewidth", 1.1)),
+        whisker_linewidth=float(defaults.get("whisker_linewidth", 1.0)),
+        cap_linewidth=float(defaults.get("cap_linewidth", 1.0)),
         box_width=float(defaults.get("box_width", 0.45)),
         sex_dodge=float(defaults.get("sex_dodge", 0.06)),
         jitter_sd=float(defaults.get("jitter_sd", 0.18)),
@@ -284,6 +292,15 @@ def run_figures_from_config(
         di_ticks=tuple(defaults.get("di_ticks", [-1.0, -0.5, 0.0, 0.5, 1.0])),
         one_sample_text_position=str(defaults.get("one_sample_text_position", "top_left")),
         one_sample_fontsize=float(defaults.get("one_sample_fontsize", 10.0)),
+        title_fontsize=float(defaults.get("title_fontsize", 10.0)),
+        axis_label_fontsize=float(defaults.get("axis_label_fontsize", 9.0)),
+        tick_label_fontsize=float(defaults.get("tick_label_fontsize", 8.0)),
+        group_label_fontsize=float(defaults.get("group_label_fontsize", 9.0)),
+        annotation_fontsize=float(defaults.get("annotation_fontsize", 9.0)),
+        bracket_fontsize=float(defaults.get("bracket_fontsize", 10.0)),
+        spine_linewidth=float(defaults.get("spine_linewidth", 1.2)),
+        tick_width=float(defaults.get("tick_width", 1.0)),
+        tick_length=float(defaults.get("tick_length", 4.0)),
     )
 
     formats = defaults.get("formats", ["png"])
@@ -315,7 +332,6 @@ def run_figures_from_config(
         df_columns=list(df.columns),
         label_map=label_map,
     )
-
     auto_scatter_specs = _auto_scatter_specs_from_correlations(
         config=config,
         fig_cfg=fig_cfg,
@@ -387,6 +403,15 @@ def run_figures_from_config(
                 di_ticks=tuple(spec.get("di_ticks", style.di_ticks)),
                 one_sample_text_position=str(spec.get("one_sample_text_position", style.one_sample_text_position)),
                 one_sample_fontsize=float(spec.get("one_sample_fontsize", style.one_sample_fontsize)),
+                title_fontsize=float(spec.get("title_fontsize", style.title_fontsize)),
+                axis_label_fontsize=float(spec.get("axis_label_fontsize", style.axis_label_fontsize)),
+                tick_label_fontsize=float(spec.get("tick_label_fontsize", style.tick_label_fontsize)),
+                group_label_fontsize=float(spec.get("group_label_fontsize", style.group_label_fontsize)),
+                annotation_fontsize=float(spec.get("annotation_fontsize", style.annotation_fontsize)),
+                bracket_fontsize=float(spec.get("bracket_fontsize", style.bracket_fontsize)),
+                spine_linewidth=float(spec.get("spine_linewidth", style.spine_linewidth)),
+                tick_width=float(spec.get("tick_width", style.tick_width)),
+                tick_length=float(spec.get("tick_length", style.tick_length)),
                 
             )
 

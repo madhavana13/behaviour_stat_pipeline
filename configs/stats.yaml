@@ -325,37 +325,42 @@ figures:
 
   auto_from_endpoints:
     enabled: true
-    source: "secondary_two_way_anova"
-    exclude:
-      - "test_total_distance_moved"
-      - "test_familiar_iz_time"
-      - "test_novel_iz_time"
+    source: secondary_two_way_anova
+    show_titles: false
+    exclude: []
 
   defaults:
-
-    x_margin: 0.20
-    title_pad: 12
-    group_label_y: -0.05
-    ylim_top_mult: 1.25
-    group_gap: 0.6   # or 0.5 or 0.4
-    box_width: 0.10
-    x_gap: 0.6
-    sex_dodge: 0.05
-    figure_size: [5.0, 4.6]
+    show_title: false
+    figure_size: [2.8, 2.4]
     dpi: 300
-    jitter_sd: 0.06
-    point_size: 14
-    point_alpha: 0.85
 
-    #DI
+    box_width: 0.20
+    box_linewidth: 1.1
+    median_linewidth: 1.1
+    whisker_linewidth: 1.0
+    cap_linewidth: 1.0
 
-    di_ylim: [-1.0, 1.0]
-    di_zero_line: true
-    di_zero_linewidth: 1.0
-    di_zero_linestyle: "--"
-    di_ticks: [-1.0, -0.5, 0.0, 0.5, 1.0]
-    one_sample_text_position: "top_left"
-    one_sample_fontsize: 10
+    point_size: 13
+    point_alpha: 0.75
+    jitter_sd: 0.035
+    sex_dodge: 0.025
+
+    group_gap: 0.55
+    x_margin: 0.24
+    title_pad: 3
+    group_label_y: -0.10
+    ylim_top_mult: 1.18
+
+    title_fontsize: 8
+    axis_label_fontsize: 9
+    tick_label_fontsize: 8
+    group_label_fontsize: 9
+    annotation_fontsize: 7
+    bracket_fontsize: 9
+
+    spine_linewidth: 1.0
+    tick_width: 0.8
+    tick_length: 3
 
     group_edgecolors:
       tail: "black"
@@ -367,36 +372,21 @@ figures:
       female: "o"
       male: "^"
 
-    label_maps:
-      group:
-        tail: Tail
-        cup: Cup
-        control: Control
-        stressed: Stressed
-        ifs: IFS
-      timepoint:
-        Total: ""
-
     group_order: ["tail", "cup", "one", "two", "control", "stressed", "ifs"]
 
     significance:
       enabled: true
       anova_summary:
         enabled: true
-        table: "secondary_two_way_anova"
-        endpoint_col: "endpoint"
-        term_col: "term"
-        label_col: "significance_label"
-        y_pad_frac: 0.12
-        h_frac: 0.035
-        linewidth: 1.2
-        title_buffer_frac: 0.12
-        position: "top_right"
-        fontsize: 10
         display:
-          group: "bracket"
-          sex: "text"
-          interaction: "text"
+          group: bracket
+          sex: none
+          interaction: none
+        y_pad_frac: 0.025
+        h_frac: 0.015
+        title_buffer_frac: 0.035
+        linewidth: 0.9
+        fontsize: 7
 
       one_sample_summary:
         enabled: true

@@ -44,16 +44,17 @@ NOR,di_explore,Discrimination index (exploration),Index
 NOR,di_iz,Discrimination index (interaction zone),Index
 NOR,test_total distance moved,Total distance moved during test,Distance (m)
 
-OFT,total_distance_moved,Total distance moved,Distance (m)
-OFT,time_in_center,Time spent in center,Time (s)
-OFT,distance_moved_in_center,Distance moved in center,Distance (m)
-OFT,time_in_corners,Time spent in corners,Time (s)
-OFT,Supportedrearing_time,Time spent supported rearing,Time (s)
-OFT,Unsupportedrearing_time,Time spent unsupported rearing,Time (s)
-OFT,Supportedrearing_count,Number of supported rearing events,Count
-OFT,Unsupportedrearing_count,Number of unsupported rearing events,Count
-OFT,Grooming_time,Time spent grooming,Time (s)
-OFT,Grooming_count,Number of grooming events,Count
+assay,endpoint,title,y_label
+OFT,total_distance_moved,Total distance moved,Total distance moved (m)
+OFT,time_in_center,Time spent in center,Time in center (s)
+OFT,distance_moved_in_center,Distance moved in center,Distance in center (m)
+OFT,time_in_corners,Time spent in corners,Time in corners (s)
+OFT,supported_rearing_time,Time spent supported rearing,Supported rearing time (s)
+OFT,unsupported_rearing_time,Time spent unsupported rearing,Unsupported rearing time (s)
+OFT,supported_rearing_count,Number of supported rearing events,Supported rearing events
+OFT,unsupported_rearing_count,Number of unsupported rearing events,Unsupported rearing events
+OFT,grooming_time,Time spent grooming,Grooming time (s)
+OFT,grooming_count,Number of grooming events,Grooming events
 
 
 VIT,delta_after_minus_before__standing__is_hand,Change in standing behavior (after − before),Delta (s)

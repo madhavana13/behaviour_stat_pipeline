@@ -478,16 +478,6 @@ def print_variability_assay_summary(
     print(summary.to_string(index=False))
     return summary
 
-if __name__ == "__main__":
-    base = Path("outputs") / "EXP-2025-001" / "tables"
-    csv_path = base / "MASTER_variability_summary.csv"
-    plot_path = base / "MASTER_variability_summary_excluding_VIT.png"
-
-    print_variability_assay_summary(csv_path)
-    plot_variability_summary_excluding_vit(csv_path, plot_path)
-
-    print(f"\nSaved figure to: {plot_path}")
-
 def write_summary_log(
     experiment_id: str,
     files: list[Path],

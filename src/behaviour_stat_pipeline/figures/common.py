@@ -35,6 +35,19 @@ class PlotStyle:
     title_pad: float = 18.0
     group_label_y: float = -0.12
     ylim_top_mult: float = 1.38
+    
+    # typography
+    title_fontsize: float = 10.0
+    axis_label_fontsize: float = 9.0
+    tick_label_fontsize: float = 8.0
+    group_label_fontsize: float = 9.0
+    annotation_fontsize: float = 9.0
+    bracket_fontsize: float = 10.0
+
+    # axes
+    spine_linewidth: float = 1.2
+    tick_width: float = 1.0
+    tick_length: float = 4.0
 
     #DI_NOR
     di_ylim: Tuple[float, float] = (-1.0, 1.0)

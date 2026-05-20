@@ -114,10 +114,11 @@ def _draw_main_effect_bracket(
     x1: float,
     x2: float,
     label: str,
-    y_pad_frac: float = 0.12,
-    h_frac: float = 0.035,
-    title_buffer_frac: float = 0.12,
-    lw: float = 1.2,
+    y_pad_frac: float = 0.08,
+    h_frac: float = 0.025,
+    title_buffer_frac: float = 0.06,
+    lw: float = 1.0,
+    fontsize: float = 10.0,
 ) -> None:
     """
     Draw a bracket from x1 to x2 at the top of the plot with a star label.
@@ -147,6 +148,7 @@ def _draw_main_effect_bracket(
         label,
         ha="center",
         va="bottom",
+        fontsize=fontsize,
     )
 
     ax.set_ylim(y0, y + h + title_buffer_frac * yr)
@@ -318,9 +320,9 @@ def plot_group_boxpoints(
                     s=style.point_size,
                     marker=style.sex_markers.get(str(s).lower(), "o"),
                     alpha=style.point_alpha,
-                    c="black",
-                    edgecolors="black",
-                    linewidths=0.0,
+                    c=edge,
+                    edgecolors=edge,
+                    linewidths=0.2,
                     zorder=3,
                 )
 
@@ -338,97 +340,28 @@ def plot_group_boxpoints(
             label,
             ha="center",
             va="top",
-            fontsize=10,
+            fontsize=style.group_label_fontsize,
             transform=ax.get_xaxis_transform(),
             clip_on=False,
         )
 
-    ax.set_title(title or f"{assay} — {endpoint}", fontsize=12, pad=style.title_pad)
-    ax.set_ylabel(y_label or endpoint)
-    ax.set_xlabel("")
+    if title is not False:
+        ax.set_title(title or f"{assay} — {endpoint}", fontsize=style.title_fontsize, pad=style.title_pad)
+    ax.set_ylabel(y_label or endpoint, fontsize=style.axis_label_fontsize)
 
     plot_key = anova_endpoint if anova_endpoint else endpoint
     is_di = _is_di_endpoint(plot_key)
 
-    # --- ANOVA annotation (group / sex / interaction) ---
-    if (
-        anova_cfg
-        and bool(anova_cfg.get("enabled", False))
-        and anova_df is not None
-        and not anova_df.empty
-    ):
-        endpoint_col = str(anova_cfg.get("endpoint_col", "endpoint"))
-        term_col = str(anova_cfg.get("term_col", "term"))
-        label_col = str(anova_cfg.get("label_col", "significance_label"))
-
-        display_cfg = anova_cfg.get("display", {}) or {}
-        group_mode = str(display_cfg.get("group", "bracket")).lower()
-        sex_mode = str(display_cfg.get("sex", "text")).lower()
-        interaction_mode = str(display_cfg.get("interaction", "text")).lower()
-
-        text_position = str(anova_cfg.get("position", "top_right"))
-        text_fontsize = float(anova_cfg.get("fontsize", 10))
-
-        key = plot_key
-        sub = anova_df[anova_df[endpoint_col].astype(str) == str(key)]
-
-        text_lines: List[str] = []
-
-        if not sub.empty and term_col in sub.columns and label_col in sub.columns:
-            labels_by_term = {"group": None, "sex": None, "interaction": None}
-
-            for _, r in sub.iterrows():
-                k = _parse_term_to_key(r[term_col])
-                if k in labels_by_term and labels_by_term[k] is None:
-                    labels_by_term[k] = str(r[label_col])
-
-            # group
-            g_label = labels_by_term["group"]
-            g_stars = _label_from_significance(g_label) if g_label is not None else None
-            if g_stars is not None:
-                if group_mode == "bracket" and g_stars != "ns" and len(g_levels) >= 2 and len(x_levels) == 1:
-                    x = x_levels[0]
-                    g1 = g_levels[0]
-                    g2 = g_levels[-1]
-                    x1 = float(positions[(g1, x)])
-                    x2 = float(positions[(g2, x)])
-                    _draw_main_effect_bracket(
-                        ax=ax,
-                        x1=min(x1, x2),
-                        x2=max(x1, x2),
-                        label=g_stars,
-                        y_pad_frac=float(anova_cfg.get("y_pad_frac", 0.05)),
-                        h_frac=float(anova_cfg.get("h_frac", 0.03)),
-                        title_buffer_frac=float(anova_cfg.get("title_buffer_frac", 0.12)),
-                        lw=float(anova_cfg.get("linewidth", 1.2)),
-                    )
-                elif group_mode == "text" or (group_mode == "bracket" and len(x_levels) != 1):
-                    text_lines.append(f"group: {g_stars}")
-
-            # sex
-            s_label = labels_by_term["sex"]
-            s_stars = _label_from_significance(s_label) if s_label is not None else None
-            if s_stars is not None and sex_mode == "text":
-                text_lines.append(f"sex: {s_stars}")
-
-            # interaction
-            i_label = labels_by_term["interaction"]
-            i_stars = _label_from_significance(i_label) if i_label is not None else None
-            if i_stars is not None and interaction_mode == "text":
-                text_lines.append(f"interaction: {i_stars}")
-
-        _draw_anova_text_lines(
-            ax,
-            text_lines,
-            position=text_position,
-            fontsize=text_fontsize,
-        )
-
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
-    ax.spines["left"].set_linewidth(2)
-    ax.spines["bottom"].set_linewidth(2)
-    ax.tick_params(width=1)
+    ax.spines["left"].set_linewidth(style.spine_linewidth)
+    ax.spines["bottom"].set_linewidth(style.spine_linewidth)
+    ax.tick_params(
+        width=style.tick_width,
+        length=style.tick_length,
+        labelsize=style.tick_label_fontsize,
+    )
+    ax.tick_params(axis="x", length=0)
 
     if is_di and one_sample_cfg and bool(one_sample_cfg.get("enabled", False)) and one_sample_df is not None and not one_sample_df.empty:
         endpoint_col = str(one_sample_cfg.get("endpoint_col", "endpoint"))
@@ -473,6 +406,80 @@ def plot_group_boxpoints(
         ymax = float(d[value_col].max())
         top = ymax * style.ylim_top_mult if ymax > 0 else 1.0
         ax.set_ylim(0, top)
+    # --- ANOVA annotation (group / sex / interaction) ---
+    if (
+        anova_cfg
+        and bool(anova_cfg.get("enabled", False))
+        and anova_df is not None
+        and not anova_df.empty
+    ):
+        endpoint_col = str(anova_cfg.get("endpoint_col", "endpoint"))
+        term_col = str(anova_cfg.get("term_col", "term"))
+        label_col = str(anova_cfg.get("label_col", "significance_label"))
+
+        display_cfg = anova_cfg.get("display", {}) or {}
+        group_mode = str(display_cfg.get("group", "bracket")).lower()
+        sex_mode = str(display_cfg.get("sex", "text")).lower()
+        interaction_mode = str(display_cfg.get("interaction", "text")).lower()
+
+        text_position = str(anova_cfg.get("position", "top_right"))
+        text_fontsize = float(anova_cfg.get("fontsize", style.annotation_fontsize))
+
+        key = plot_key
+        sub = anova_df[anova_df[endpoint_col].astype(str) == str(key)]
+
+        text_lines: List[str] = []
+
+        if not sub.empty and term_col in sub.columns and label_col in sub.columns:
+            labels_by_term = {"group": None, "sex": None, "interaction": None}
+
+            for _, r in sub.iterrows():
+                k = _parse_term_to_key(r[term_col])
+                if k in labels_by_term and labels_by_term[k] is None:
+                    labels_by_term[k] = str(r[label_col])
+
+            # group
+            g_label = labels_by_term["group"]
+            g_stars = _label_from_significance(g_label) if g_label is not None else None
+            if g_stars is not None:
+                if group_mode == "bracket" and g_stars != "ns" and len(g_levels) >= 2 and len(x_levels) == 1:
+                    x = x_levels[0]
+                    g1 = g_levels[0]
+                    g2 = g_levels[-1]
+                    x1 = float(positions[(g1, x)])
+                    x2 = float(positions[(g2, x)])
+                    _draw_main_effect_bracket(
+                        ax=ax,
+                        x1=min(x1, x2),
+                        x2=max(x1, x2),
+                        label=g_stars,
+                        y_pad_frac=float(anova_cfg.get("y_pad_frac", 0.05)),
+                        h_frac=float(anova_cfg.get("h_frac", 0.03)),
+                        title_buffer_frac=float(anova_cfg.get("title_buffer_frac", 0.12)),
+                        lw=float(anova_cfg.get("linewidth", 1.2)),
+                        fontsize=style.bracket_fontsize,
+                    )
+                elif group_mode == "text" or (group_mode == "bracket" and len(x_levels) != 1):
+                    text_lines.append(f"group: {g_stars}")
+
+            # sex
+            s_label = labels_by_term["sex"]
+            s_stars = _label_from_significance(s_label) if s_label is not None else None
+            if s_stars is not None and sex_mode == "text":
+                text_lines.append(f"sex: {s_stars}")
+
+            # interaction
+            i_label = labels_by_term["interaction"]
+            i_stars = _label_from_significance(i_label) if i_label is not None else None
+            if i_stars is not None and interaction_mode == "text":
+                text_lines.append(f"interaction: {i_stars}")
+
+        _draw_anova_text_lines(
+            ax,
+            text_lines,
+            position=text_position,
+            fontsize=text_fontsize,
+        )
 
     xmin = min(xticks) - style.x_margin
     xmax = max(xticks) + style.x_margin
