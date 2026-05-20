@@ -7,6 +7,7 @@ group_order:
 
 paths:
   metadata_subjects: data/experiments/EXP-2026-002/metadata/subjects.csv
+  exclusions: data/experiments/EXP-2026-002/metadata/exclusions.csv
   processed_dir: data/experiments/EXP-2026-002/processed
   interim_dir: data/experiments/EXP-2026-002/interim
   out_tables: outputs/EXP-2026-002/tables
