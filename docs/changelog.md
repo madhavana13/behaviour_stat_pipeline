@@ -49,3 +49,13 @@ Checkpoint – Schema Normalization + Robust OFT Handling
 - Pipeline now assumes raw vendor exports may vary in header naming and format
 - Schema normalization ensures canonical internal representation before QC/derivation
 - Duplicate handling in OFT is now **value-aware (coalescing)** rather than purely structural
+
+### Adding an exclusion file - rules
+
+| column         | meaning                                       |
+| -------------- | --------------------------------------------- |
+| `mouse_id`     | canonical ID, matching processed data         |
+| `assay`        | `*` for all assays, or `OFT2`, `NOR`, etc.    |
+| `endpoint`     | `*` for all endpoints, or exact endpoint name |
+| `exclude_from` | `primary`, `sensitivity`, or `all`            |
+| `reason`       | required free-text reason                     |
