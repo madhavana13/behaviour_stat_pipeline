@@ -1,33 +1,27 @@
 import pandas as pd
-from behaviour_stat_pipeline.io import load_tracking_csv, merge_subject_metadata, load_subjects
 
-subjects = load_subjects("data/experiments/EXP-2025-001/metadata/subjects.csv")
+df = pd.read_csv(r"data\experiments\EXP-2026-002\processed\OFT2_processed.csv")
 
-f1 = "data/experiments/EXP-2025-001/raw/oft/02_HE2_OFT_27A_output_summary.csv"
-f2 = "data/experiments/EXP-2025-001/raw/oft/HE2_OFT_Report2_output_summary.csv"
+f1 = "group"
+f2 = "sex"
 
-df1 = load_tracking_csv(f1, assay="OFT")
-df1 = merge_subject_metadata(df1, subjects, on_missing_subjects="warn_drop")
-df1["timepoint"] = "Single"
-df1["source_tag"] = "raw_summary"
+exclude = {"mouse_id", "group", "sex", "assay", "experiment_id"}
 
-df2 = load_tracking_csv(f2, assay="OFT")
-df2 = merge_subject_metadata(df2, subjects, on_missing_subjects="warn_drop")
-df2["timepoint"] = "Single"
-df2["source_tag"] = "report"
+for endpoint in df.columns:
+    if endpoint in exclude:
+        continue
 
-cols_to_compare = [
-    "mouse_id", "source_tag",
-    "total_time_in_arena", "total_distance_moved", "mean_speed",
-    "time_in_center", "distance_moved_in_center",
-    "time_in_periphery", "time_in_corners",
-    "supported_rearing_time", "supported_rearing_count",
-    "unsupported_rearing_time", "unsupported_rearing_count",
-]
+    tmp = df[[endpoint, f1, f2]].copy()
+    tmp[endpoint] = pd.to_numeric(tmp[endpoint], errors="coerce")
+    tmp = tmp.dropna(subset=[endpoint, f1, f2])
 
-combined = pd.concat([df1, df2], ignore_index=True)
+    group_levels = tmp[f1].dropna().unique().tolist()
+    sex_levels = tmp[f2].dropna().unique().tolist()
 
-for mid in ["27A_ID1", "27A_ID2", "27A_ID3"]:
-    print("\n", "=" * 80)
-    print(mid)
-    print(combined.loc[combined["mouse_id"] == mid, [c for c in cols_to_compare if c in combined.columns]].to_string(index=False))
+    if tmp.empty or len(group_levels) != 2 or len(sex_levels) != 2:
+        print("\nBAD ENDPOINT:", endpoint)
+        print("n complete:", len(tmp))
+        print("group levels:", group_levels)
+        print("sex levels:", sex_levels)
+        if not tmp.empty:
+            print(pd.crosstab(tmp[f1], tmp[f2]))

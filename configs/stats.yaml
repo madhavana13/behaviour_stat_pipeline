@@ -115,8 +115,14 @@ diagnostics:
       - supported_rearing_count
       - unsupported_rearing_time
       - unsupported_rearing_count
-      - grooming_time
-      - grooming_count
+      - classifier__supported_rearing_time
+      - classifier__supported_rearing_count
+      - classifier__unsupported_rearing_time
+      - classifier__unsupported_rearing_count
+      - classifier__grooming_time
+      - classifier__grooming_count
+      - classifier__digging_time
+      - classifier__digging_count
     epm: 
       - count_head_dips
       - count_psap
@@ -195,10 +201,14 @@ secondary_two_way_anova:
       - time_in_center
       - distance_moved_in_center
       - time_in_corners
-      - supported_rearing_time
-      - supported_rearing_count
-      - unsupported_rearing_time
-      - unsupported_rearing_count
+      - classifier__supported_rearing_time
+      - classifier__supported_rearing_count
+      - classifier__unsupported_rearing_time
+      - classifier__unsupported_rearing_count
+      - classifier__grooming_time
+      - classifier__grooming_count
+      - classifier__digging_time
+      - classifier__digging_count
 
 
     epm: 
@@ -328,39 +338,39 @@ figures:
     source: secondary_two_way_anova
     show_titles: false
     exclude: []
-
+  
   defaults:
     show_title: false
-    figure_size: [2.8, 2.4]
+    figure_size: [2.4, 2.4]
     dpi: 300
 
-    box_width: 0.20
+    box_width: 0.10
     box_linewidth: 1.1
     median_linewidth: 1.1
     whisker_linewidth: 1.0
     cap_linewidth: 1.0
 
-    point_size: 13
+    point_size: 6
     point_alpha: 0.75
     jitter_sd: 0.035
-    sex_dodge: 0.025
+    sex_dodge: 0.035
 
-    group_gap: 0.55
-    x_margin: 0.24
+    group_gap: 0.25
+    x_margin: 0.14
     title_pad: 3
     group_label_y: -0.10
     ylim_top_mult: 1.18
 
     title_fontsize: 8
-    axis_label_fontsize: 9
-    tick_label_fontsize: 8
-    group_label_fontsize: 9
-    annotation_fontsize: 7
-    bracket_fontsize: 9
+    axis_label_fontsize: 7
+    tick_label_fontsize: 6
+    group_label_fontsize: 7
+    annotation_fontsize: 6
+    bracket_fontsize: 6
 
-    spine_linewidth: 1.0
-    tick_width: 0.8
-    tick_length: 3
+    spine_linewidth: .5
+    tick_width: 0.6
+    tick_length: 2
 
     group_edgecolors:
       tail: "black"

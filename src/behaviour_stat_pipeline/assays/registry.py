@@ -167,7 +167,6 @@ class BaseAssayRunner:
                 f"retained unchanged: {suspicious}"
             )
 
-        report = merge_subject_metadata(report, subjects, on_missing_subjects="warn_drop")
         report["assay"] = self.assay_name
         report["assay_type"] = self.assay_name
         report["assay_instance"] = ctx.assay_instance or self.assay_name
@@ -182,46 +181,91 @@ class BaseAssayRunner:
         primary: pd.DataFrame,
         classifier: pd.DataFrame,
     ) -> pd.DataFrame:
-        key_cols = ["mouse_id", "timepoint"]
+        """
+        Merge optional classifier/report summaries into the primary assay table.
 
-        missing_keys = [c for c in key_cols if c not in primary.columns or c not in classifier.columns]
+        Contract
+        --------
+        - Both primary and classifier are raw-derived tables.
+        - All non-key columns from both tables are retained.
+        - The only unprefixed shared columns are the merge keys.
+        - Classifier non-key columns are namespaced with 'classifier__'
+        before merging, so no column is overwritten, dropped, or silently suffixed.
+        """
+        key_cols = ["mouse_id", "timepoint"]
+        key_set = set(key_cols)
+
+        missing_keys = [
+            c for c in key_cols
+            if c not in primary.columns or c not in classifier.columns
+        ]
         if missing_keys:
             raise ValueError(
                 f"Cannot merge classifier summary for {self.assay_name}; "
                 f"missing key columns: {missing_keys}"
             )
 
-        duplicate_cols = set(primary.columns) & set(classifier.columns)
+        if primary.duplicated(subset=key_cols).any():
+            dups = primary.loc[
+                primary.duplicated(subset=key_cols, keep=False),
+                key_cols,
+            ]
+            raise ValueError(
+                f"Primary rows are not unique for {self.assay_name} "
+                f"at mouse_id × timepoint:\n{dups.to_string(index=False)}"
+            )
 
-        classifier_extra_cols = key_cols + sorted(
-            c for c in classifier.columns
-            if c not in duplicate_cols and c not in {"group", "sex"}
-        )
-
-        classifier_extra = classifier[classifier_extra_cols].copy()
-
-        if classifier_extra.duplicated(subset=key_cols).any():
-            dups = classifier_extra.loc[
-                classifier_extra.duplicated(subset=key_cols, keep=False),
+        if classifier.duplicated(subset=key_cols).any():
+            dups = classifier.loc[
+                classifier.duplicated(subset=key_cols, keep=False),
                 key_cols,
             ]
             raise ValueError(
                 f"Classifier/report rows are not unique for {self.assay_name} "
-                f"at mouse_id × timepoint:\n{dups}"
+                f"at mouse_id × timepoint:\n{dups.to_string(index=False)}"
+            )
+
+        classifier_renamed = classifier.copy()
+
+        rename_map = {
+            col: f"classifier__{col}"
+            for col in classifier_renamed.columns
+            if col not in key_set
+        }
+
+        classifier_renamed = classifier_renamed.rename(columns=rename_map)
+
+        remaining_overlap = sorted(
+            (set(primary.columns) & set(classifier_renamed.columns)) - key_set
+        )
+
+        if remaining_overlap:
+            raise ValueError(
+                f"Internal merge invariant failed for {self.assay_name}: "
+                f"non-key columns still overlap after classifier namespacing: "
+                f"{remaining_overlap}"
             )
 
         merged = primary.merge(
-            classifier_extra,
+            classifier_renamed,
             on=key_cols,
             how="left",
             validate="one_to_one",
         )
 
-        added_cols = [c for c in classifier_extra.columns if c not in key_cols]
-        if added_cols:
-            missing_classifier = merged[added_cols].isna().all(axis=1)
+        classifier_value_cols = [
+            c for c in classifier_renamed.columns
+            if c not in key_set
+        ]
+
+        if classifier_value_cols:
+            missing_classifier = merged[classifier_value_cols].isna().all(axis=1)
             if missing_classifier.any():
-                missing_ids = merged.loc[missing_classifier, "mouse_id"].astype(str).tolist()
+                missing_ids = (
+                    merged.loc[missing_classifier, "mouse_id"]
+                    .astype(str)
+                    .tolist()
+                )
                 print(
                     f"WARNING [{self.assay_name}]: some primary rows had no matching "
                     f"classifier/report row: {missing_ids}"
