@@ -334,50 +334,62 @@ figures:
     source: secondary_two_way_anova
     show_titles: false
     exclude: []
-  
+
   defaults:
     show_title: false
-    figure_size: [2.4, 2.4]
+    figure_size: [2.65, 3.35]
     dpi: 300
+    transparent_background: false # flip to False for opaque background with axis/text colors; True for transparent bg and colored text/axes
 
-    show_point_ids: true
+    # Optional debugging labels for individual points
+    show_point_ids: false
     point_id_fontsize: 2
     point_id_dx: 0.015
     point_id_dy: 0.0
 
-    box_width: 0.08
-    box_linewidth: 1.1
+    # Box/point geometry: old absolute x-layout logic
+    box_width: 0.02
+    box_face_alpha: 0.10 # new unified control for box transparency
+    box_linewidth: 1.0
     median_linewidth: 1.1
     whisker_linewidth: 1.0
     cap_linewidth: 1.0
 
-    point_size: 6
-    point_alpha: 0.75
-    jitter_sd: 0.035
-    sex_dodge: 0.035
+    point_size: 10
+    point_alpha: 0.90
+    jitter_sd: 0.008
+    sex_dodge: 0.006
 
-    group_gap: 0.25
-    x_margin: 0.14
-    title_pad: 3
-    group_label_y: -0.10
-    ylim_top_mult: 1.18
+    # X-axis layout
+    group_gap: 0.06
+    x_gap: 0.35
+    x_margin: 0.03
 
+    # Vertical layout
+    title_pad: 2
+    group_label_y: -0.09
+    ylim_top_mult: 1.08
+
+    # Typography
+    axis_color: "black" # for axes, ticks, and annotation lines (e.g., significance brackets); white for dark backgrounds, black for light backgrounds
+    text_color: "black" # for all text elements (titles, labels, annotations); set to white if using dark background with black axes, set to black if using light background with black axes
     title_fontsize: 8
-    axis_label_fontsize: 7
-    tick_label_fontsize: 6
-    group_label_fontsize: 7
-    annotation_fontsize: 6
-    bracket_fontsize: 6
+    axis_label_fontsize: 8
+    tick_label_fontsize: 7
+    group_label_fontsize: 8
+    annotation_fontsize: 7
+    bracket_fontsize: 7
 
-    spine_linewidth: .5
-    tick_width: 0.6
-    tick_length: 2
+    # Axes
+    spine_linewidth: 0.7
+    tick_width: 0.7
+    tick_length: 2.5
 
     group_edgecolors:
       tail: "black"
       cup: "darkorange"
-      control: "RoyalBlue"
-      ifs: "MediumSeaGreen"
+      control: "darkorchid"
+      ifs: "darkorange"
 
     sex_markers:
       female: "o"
@@ -387,15 +399,16 @@ figures:
 
     significance:
       enabled: true
+
       anova_summary:
         enabled: true
         display:
           group: bracket
           sex: none
           interaction: none
-        y_pad_frac: 0.025
-        h_frac: 0.015
-        title_buffer_frac: 0.035
+        y_pad_frac: 0.014
+        h_frac: 0.008
+        title_buffer_frac: 0.020
         linewidth: 0.9
         fontsize: 7
 
@@ -414,20 +427,52 @@ figures:
       type: "boxpoints"
       value_label: "Time with objects (s)"
       x_order: ["Familiar", "Novel"]
-      group_order: ["tail", "cup"]
+      group_order: ["control", "ifs"]
+      figure_size: [4.2, 3.4]
+      box_width: 0.08
+      group_gap: 0.55
+      x_gap: 0.38
+      x_margin: 0.14
+      jitter_sd: 0.018
+      sex_dodge: 0.018
       wide_to_long:
         x_col: "object"
         mapping:
           Familiar: "test_familiar_iz_time"
           Novel: "test_novel_iz_time"
-
+      significance:
+        anova_summary:
+          enabled: true
+          manual_brackets:
+            - from: {group: "control", x: "Familiar"}
+              to:   {group: "control", x: "Novel"}
+              label: "*"
+              y_pad_frac: 0.025
+              h_frac: 0.008
+              title_buffer_frac: 0.020
+              linewidth: 0.5
+              fontsize: 7
+              y: 54
+              h: 0.8              
+            - from: {group: "ifs", x: "Familiar"}
+              to:   {group: "ifs", x: "Novel"}
+              label: "*"
+              y_pad_frac: 0.025
+              h_frac: 0.008
+              title_buffer_frac: 0.020
+              linewidth: 0.5
+              fontsize: 7
+              y: 54
+              h: 0.8
     - name: "test_total_distance_moved"
       assay: "nor"
       type: "boxpoints"
-      x_gap: 0.8
       value_label: "Distance moved (m)"
       x_order: ["Total"]
       group_order: ["tail", "cup"]
+      figure_size: [3.4, 3.8]
+      box_width: 0.10
+      group_gap: 0.55
       wide_to_long:
         x_col: "measure"
         mapping:
@@ -436,10 +481,12 @@ figures:
     - name: "Time in Alleys"
       assay: "lm"
       type: "boxpoints"
-      x_gap: 0.8
       value_label: "Time (s)"
       x_order: ["Protected", "Centre", "Narrow"]
       group_order: ["centre", "narrow_centre"]
+      figure_size: [4.4, 3.8]
+      box_width: 0.08
+      group_gap: 0.55
       wide_to_long:
         x_col: "measure"
         mapping:
@@ -450,10 +497,15 @@ figures:
     - name: "Time spent with hand in right lower quadrant"
       assay: "vit"
       type: "boxpoints"
-      x_gap: 0.8
       value_label: "Time (s)"
       x_order: ["Before", "After"]
       group_order: ["tail", "cup", "control", "ifs"]
+      figure_size: [5.2, 3.8]
+      box_width: 0.08
+      group_gap: 0.12
+      x_gap: 0.42
+      x_margin: 0.20
+      point_size: 8
       wide_to_long:
         x_col: "timepoint"
         mapping:

@@ -41,6 +41,10 @@ class PlotStyle:
     title_pad: float = 18.0
     group_label_y: float = -0.12
     ylim_top_mult: float = 1.38
+    box_face_alpha: float = 0.18
+    transparent_background: bool = False
+    axis_color: str = "black"
+    text_color: str = "black"
     
     # typography
     title_fontsize: float = 10.0

@@ -37,7 +37,11 @@ def plot_group_scatter(
     groups = infer_order(d[group_col], group_order)
     sexes = infer_order(d[sex_col], sex_order or ["female", "male"])
 
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(figsize=style.figure_size, dpi=style.dpi)
+
+    if style.transparent_background:
+        fig.patch.set_alpha(0.0)
+        ax.set_facecolor("none")
 
     # points: marker by sex, edgecolor by group
     for g in groups:
@@ -69,11 +73,26 @@ def plot_group_scatter(
         ygrid = a + b * xgrid
         ax.plot(xgrid, ygrid, linewidth=1.5)
 
-    ax.set_xlabel(x_label or x)
-    ax.set_ylabel(y_label or y)
+    ax.set_xlabel(x_label or x, color=style.text_color)
+    ax.set_ylabel(y_label or y, color=style.text_color)
     if title:
-        ax.set_title(title)
+        ax.set_title(title, color=style.text_color)
+
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.spines["left"].set_color(style.axis_color)
+    ax.spines["bottom"].set_color(style.axis_color)
+
+    ax.tick_params(
+        color=style.axis_color,
+        labelcolor=style.text_color,
+    )
 
     fig.tight_layout()
-    fig.savefig(out_path, dpi=300)
+    fig.savefig(
+        out_path,
+        dpi=style.dpi,
+        transparent=style.transparent_background,
+        bbox_inches="tight",
+    )
     plt.close(fig)
