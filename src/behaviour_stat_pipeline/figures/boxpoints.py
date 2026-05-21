@@ -378,16 +378,17 @@ def plot_group_boxpoints(
                 if style.show_point_ids:
                     for xj, yj, mid in zip(xjs, ys, mids_s):
                         ax.text(
-                            center,
-                            style.group_label_y,
-                            label,
-                            ha="center",
-                            va="top",
-                            fontsize=style.group_label_fontsize,
-                            transform=ax.get_xaxis_transform(),
+                            xj + style.point_id_dx,
+                            yj + style.point_id_dy,
+                            str(mid),
+                            fontsize=style.point_id_fontsize,
+                            ha="left",
+                            va="center",
+                            color=edge,
+                            alpha=0.9,
+                            zorder=4,
                             clip_on=False,
-                            color=style.text_color,
-                        )             
+                        )          
 
     ax.set_xticks(xticks)
     ax.set_xticklabels(xticklabels, rotation=0)
@@ -406,6 +407,7 @@ def plot_group_boxpoints(
             fontsize=style.group_label_fontsize,
             transform=ax.get_xaxis_transform(),
             clip_on=False,
+            color=style.text_color,
         )
 
     if title is not False:
