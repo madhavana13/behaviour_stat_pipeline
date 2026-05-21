@@ -9,11 +9,11 @@ paths:
   metadata_subjects: data/experiments/EXP-2026-002/metadata/subjects.csv
   exclusions: data/experiments/EXP-2026-002/metadata/exclusions.csv
   processed_dir: data/experiments/EXP-2026-002/processed
-  interim_dir: data/experiments/EXP-2026-002/interim
-  out_tables: outputs/EXP-2026-002/tables
-  out_figures: outputs/EXP-2026-002/figures
-  out_logs: outputs/EXP-2026-002/logs
 
+  out_figures: outputs/EXP-2026-002/figures
+  out_tables: outputs/EXP-2026-002/tables
+  out_logs: outputs/EXP-2026-002/logs
+  
 raw:
   vit: data/experiments/EXP-2026-002/raw/vit
   nor: data/experiments/EXP-2026-002/raw/nor

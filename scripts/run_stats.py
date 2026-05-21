@@ -638,10 +638,6 @@ def main() -> None:
     cfg = apply_assay_instance_aliases(cfg, exp_cfg)
     assays = cfg.assays if args.assays is None else [a.lower() for a in args.assays]
 
-    cfg.out_tables.mkdir(parents=True, exist_ok=True)
-    cfg.out_logs.mkdir(parents=True, exist_ok=True)
-    cfg.out_figures.mkdir(parents=True, exist_ok=True)
-
     subjects = read_subjects(cfg.subjects_path)
 
     base_out_tables = cfg.out_tables
