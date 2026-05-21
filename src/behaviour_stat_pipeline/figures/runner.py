@@ -9,7 +9,7 @@ import pandas as pd
 from .boxpoints import plot_group_boxpoints
 from .common import PlotStyle, require_columns
 from .scatter import plot_group_scatter
-
+from behaviour_stat_pipeline.common.exclusions import apply_exclusions_for_endpoint
 
 def _make_long_from_mapping(
     df: pd.DataFrame,
@@ -149,6 +149,73 @@ def _slug(s: str) -> str:
     s = re.sub(r"[^a-z0-9_]+", "", s)
     return s
 
+def _exclusion_summary(applied: pd.DataFrame) -> dict:
+    if applied is None or applied.empty:
+        return {
+            "n_excluded": 0,
+            "excluded_mouse_ids": "",
+            "exclusion_reasons": "",
+        }
+
+    return {
+        "n_excluded": applied["mouse_id"].nunique(),
+        "excluded_mouse_ids": ";".join(
+            sorted(applied["mouse_id"].astype(str).unique())
+        ),
+        "exclusion_reasons": "; ".join(
+            sorted(applied["reason"].astype(str).unique())
+        ),
+    }
+
+
+def _apply_plot_exclusions(
+    df: pd.DataFrame,
+    exclusions: pd.DataFrame | None,
+    *,
+    assay: str,
+    endpoint: str,
+    mouse_id_col: str,
+) -> tuple[pd.DataFrame, dict]:
+    if exclusions is None or exclusions.empty:
+        return df.copy(), _exclusion_summary(pd.DataFrame())
+
+    df_plot, applied = apply_exclusions_for_endpoint(
+        df,
+        exclusions,
+        assay=assay.upper(),
+        endpoint=endpoint,
+        analysis_scope="primary",
+        mouse_id_col=mouse_id_col,
+    )
+
+    return df_plot, _exclusion_summary(applied)
+
+
+def _write_figure_log(log_path: Path, records: list[dict]) -> None:
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if not records:
+        log_path.write_text("No figures written.\n", encoding="utf-8")
+        return
+
+    lines = []
+    for r in records:
+        lines.append(f"figure_name: {r.get('figure_name', '')}")
+        lines.append(f"plot_type: {r.get('plot_type', '')}")
+        lines.append(f"endpoint: {r.get('endpoint', '')}")
+        lines.append(f"n_rows_processed_pre_exclusion: {r.get('n_rows_processed_pre_exclusion', '')}")
+        lines.append(f"n_rows_plotted_after_exclusion: {r.get('n_rows_plotted_after_exclusion', '')}")
+        lines.append(f"n_mice_processed_pre_exclusion: {r.get('n_mice_processed_pre_exclusion', '')}")
+        lines.append(f"n_mice_plotted_after_exclusion: {r.get('n_mice_plotted_after_exclusion', '')}")
+        lines.append(f"n_excluded: {r.get('n_excluded', 0)}")
+        lines.append(f"excluded_mouse_ids: {r.get('excluded_mouse_ids', '')}")
+        lines.append(f"exclusion_reasons: {r.get('exclusion_reasons', '')}")
+        lines.append("output_files:")
+        for p in r.get("output_files", []):
+            lines.append(f"  - {p}")
+        lines.append("")
+
+    log_path.write_text("\n".join(lines), encoding="utf-8")
 
 def _resolve_corr_specs_for_figures(cfg: Dict[str, Any], assay: str) -> List[Dict[str, Any]]:
     corr = (cfg.get("correlations", {}) or {})
@@ -253,6 +320,7 @@ def run_figures_from_config(
     mouse_id_col: str = "mouse_id",
     group_col: str = "group",
     sex_col: str = "sex",
+    exclusions: pd.DataFrame | None = None,
 ) -> List[Path]:
     fig_cfg = config.get("figures", {})
     if not fig_cfg or not fig_cfg.get("enabled", False):
@@ -279,6 +347,10 @@ def run_figures_from_config(
         point_size=float(defaults.get("point_size", 28.0)),
         x_gap=float(defaults.get("x_gap", 0.8)),
         point_alpha=float(defaults.get("point_alpha", 0.9)),
+        show_point_ids=bool(defaults.get("show_point_ids", False)),
+        point_id_fontsize=float(defaults.get("point_id_fontsize", 6.0)),
+        point_id_dx=float(defaults.get("point_id_dx", 0.015)),
+        point_id_dy=float(defaults.get("point_id_dy", 0.0)),        
         figure_size=(float(figure_size_cfg[0]), float(figure_size_cfg[1])),
         dpi=int(defaults.get("dpi", 300)),
         x_margin=float(defaults.get("x_margin", 0.45)),
@@ -320,6 +392,7 @@ def run_figures_from_config(
 
     written: List[Path] = []
     label_map = _load_label_map(config)
+    figure_log_records: list[dict] = []
 
     specs = fig_cfg.get("specs", []) or []
     if not isinstance(specs, list):
@@ -374,7 +447,28 @@ def run_figures_from_config(
                 raise ValueError(f"Figure spec '{name}' wide_to_long.mapping must be a non-empty dict.")
 
             id_cols = [mouse_id_col, group_col, sex_col]
-            long_df = _make_long_from_mapping(df, x_col=x_col, mapping=mapping, id_cols=id_cols)
+            mapped_endpoints = [str(m) for m in mapping.values() if m is not None]
+            unique_mapped_endpoints = sorted(set(mapped_endpoints))
+
+            if len(unique_mapped_endpoints) == 1:
+                exclusion_endpoint = unique_mapped_endpoints[0]
+            else:
+                exclusion_endpoint = name
+
+            df_plot, excl_info = _apply_plot_exclusions(
+                df,
+                exclusions,
+                assay=assay,
+                endpoint=exclusion_endpoint,
+                mouse_id_col=mouse_id_col,
+            )
+
+            long_df = _make_long_from_mapping(
+                df_plot,
+                x_col=x_col,
+                mapping=mapping,
+                id_cols=id_cols,
+            )
 
             style_spec = PlotStyle(
                 group_edgecolors=style.group_edgecolors,
@@ -389,6 +483,10 @@ def run_figures_from_config(
                 jitter_sd=float(spec.get("jitter_sd", style.jitter_sd)),
                 sex_dodge=float(spec.get("sex_dodge", style.sex_dodge)),
                 x_gap=float(spec.get("x_gap", style.x_gap)),
+                show_point_ids=bool(spec.get("show_point_ids", style.show_point_ids)),
+                point_id_fontsize=float(spec.get("point_id_fontsize", style.point_id_fontsize)),
+                point_id_dx=float(spec.get("point_id_dx", style.point_id_dx)),
+                point_id_dy=float(spec.get("point_id_dy", style.point_id_dy)),
                 group_gap=float(spec.get("group_gap", style.group_gap)),
                 figure_size=tuple(spec.get("figure_size", style.figure_size)),
                 dpi=int(spec.get("dpi", style.dpi)),
@@ -466,6 +564,17 @@ def run_figures_from_config(
             )
 
             written.extend(out_paths)
+            figure_log_records.append({
+                "figure_name": name,
+                "plot_type": "boxpoints",
+                "endpoint": exclusion_endpoint,
+                "n_rows_processed_pre_exclusion": len(df),
+                "n_rows_plotted_after_exclusion": len(df_plot),
+                "n_mice_processed_pre_exclusion": df[mouse_id_col].nunique(),
+                "n_mice_plotted_after_exclusion": df_plot[mouse_id_col].nunique(),
+                **excl_info,
+                "output_files": [str(p) for p in out_paths],
+            })
 
         elif plot_type == "scatter":
             x = spec.get("x")
@@ -476,9 +585,20 @@ def run_figures_from_config(
             fit_cfg = spec.get("fit", {}) or {}
             fit_enabled = bool(fit_cfg.get("enabled", True))
 
+            exclusion_endpoint = name
+
+            df_plot, excl_info = _apply_plot_exclusions(
+                df,
+                exclusions,
+                assay=assay,
+                endpoint=exclusion_endpoint,
+                mouse_id_col=mouse_id_col,
+            )
+
+
             for out_path in out_paths:
                 plot_group_scatter(
-                    df=df,
+                    df=df_plot,
                     x=str(x),
                     y=str(y),
                     out_path=str(out_path),
@@ -497,5 +617,18 @@ def run_figures_from_config(
                 )
 
             written.extend(out_paths)
-
+            figure_log_records.append({
+                "figure_name": name,
+                "plot_type": "scatter",
+                "endpoint": exclusion_endpoint,
+                "n_rows_processed_pre_exclusion": len(df),
+                "n_rows_plotted_after_exclusion": len(df_plot),
+                "n_mice_processed_pre_exclusion": df[mouse_id_col].nunique(),
+                "n_mice_plotted_after_exclusion": df_plot[mouse_id_col].nunique(),
+                **excl_info,
+                "output_files": [str(p) for p in out_paths],
+            })
+    log_path = out_figures.parent / "logs" / f"{output_prefix}_figures_summary.txt"
+    _write_figure_log(log_path, figure_log_records)
+    
     return written

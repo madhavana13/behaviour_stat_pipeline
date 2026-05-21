@@ -27,6 +27,12 @@ class PlotStyle:
     jitter_sd: float = 0.18
     sex_dodge: float = 0.06
 
+    # optional debugging labels for individual points
+    show_point_ids: bool = False
+    point_id_fontsize: float = 6.0
+    point_id_dx: float = 0.015
+    point_id_dy: float = 0.0
+
     # layout
     group_gap: float = 0.6
     figure_size: Tuple[float, float] = (5.2, 4.2)

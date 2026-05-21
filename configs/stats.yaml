@@ -340,7 +340,12 @@ figures:
     figure_size: [2.4, 2.4]
     dpi: 300
 
-    box_width: 0.10
+    show_point_ids: true
+    point_id_fontsize: 2
+    point_id_dx: 0.015
+    point_id_dy: 0.0
+
+    box_width: 0.08
     box_linewidth: 1.1
     median_linewidth: 1.1
     whisker_linewidth: 1.0

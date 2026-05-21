@@ -5,7 +5,7 @@ from experiment.yaml:
 python scripts/run_assay.py --assay vit --config configs/stats.yaml --experiment-config configs/experiments/EXP-2026-002.yaml
 python scripts/run_assay.py --assay nor --config configs/stats.yaml --experiment-config configs/experiments/EXP-2026-002.yaml
 python scripts/run_assay.py --assay lm --config configs/stats.yaml --experiment-config configs/experiments/EXP-2026-002.yaml
-python scripts/run_assay.py --assay oft --config configs/stats.yaml --experiment-config configs/experiments/EXP-2026-002.yaml
+python scripts/run_assay.py --assay oft1 --config configs/stats.yaml --experiment-config configs/experiments/EXP-2026-002.yaml
 python scripts/run_assay.py --assay epm --config configs/stats.yaml --experiment-config configs/experiments/EXP-2026-002.yaml
 
 
@@ -34,7 +34,7 @@ python scripts/nor_check_individual_change.py --experiment-config configs/experi
 To create new files/folders:
 
             New-Item -ItemType Directory -Path src\behaviour_stat_pipeline\figures -Force | Out-Null
-            New-Item -ItemType File -Path scripts\update_tiny_test_data.py
+            New-Item -ItemType File -Path src/behaviour_stat_pipeline/common/exclusions.py
             New-Item -ItemType Directory -Path scripts/derive_vit_processed.py
 
 

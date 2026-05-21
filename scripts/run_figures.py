@@ -6,6 +6,7 @@ from pathlib import Path
 import yaml
 
 from behaviour_stat_pipeline.figures.runner import run_figures_from_config
+from behaviour_stat_pipeline.common.exclusions import load_exclusions
 
 def load_yaml(path: str) -> dict:
     if not path:
@@ -43,7 +44,11 @@ def main() -> None:
         cfg = yaml.safe_load(f)
         exp_cfg = load_yaml(args.experiment_config)
         exp_paths = exp_cfg.get("paths", {})
-
+    exclusions_path = (
+        exp_paths.get("metadata_exclusions", "")
+        or exp_paths.get("exclusions", "")
+    )
+    exclusions = load_exclusions(exclusions_path)
     paths = cfg.get("paths", {})
 
     processed_dir = Path(
@@ -81,6 +86,7 @@ def main() -> None:
             mouse_id_col=mouse_id_col,
             group_col=group_col,
             sex_col=sex_col,
+            exclusions=exclusions,
         )
         written_all.extend(written)
 
