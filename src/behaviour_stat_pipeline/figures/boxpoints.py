@@ -494,8 +494,11 @@ def plot_group_boxpoints(
         top = ymax * style.ylim_top_mult if ymax > 0 else 1.0
         ax.set_ylim(0, top)
     # --- ANOVA annotation (group / sex / interaction) ---
+    # For DI endpoints, significance shown on the plot should come from the
+    # primary one-sample test against chance level, not from the secondary ANOVA.
     if (
-        anova_cfg
+        not is_di
+        and anova_cfg
         and bool(anova_cfg.get("enabled", False))
         and anova_df is not None
         and not anova_df.empty
