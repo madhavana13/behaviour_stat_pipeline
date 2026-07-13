@@ -171,12 +171,37 @@ diagnostics:
       - rct_total_intake
       - rct_pi
       - rct_di
+      - marbles_buried
+      - immobility_time_s
+      - immobility_fraction
+      - immobility_bouts
+      - immobility_mean_bout_len_s
+      - immobility_latency_s
+
+      - swinging_time_s
+      - swinging_fraction
+      - swinging_bouts
+      - swinging_mean_bout_len_s
+      - swinging_latency_s
+
+      - curling_time_s
+      - curling_fraction
+      - curling_bouts
+      - curling_mean_bout_len_s
+      - curling_latency_s
+
+      - total_mobility_time_s
+      - total_mobility_fraction
+      - total_mobility_bouts
+      - total_mobility_mean_bout_len_s
+
 
 secondary_two_way_anova:
   enabled: true
   type: 2
   include_interaction: true
   factors: [group, sex]
+  correction_across_endpoints: holm
 
   factor_orders:
     group: []                 # empty = infer deterministically
@@ -259,6 +284,30 @@ secondary_two_way_anova:
       - rct_total_intake
       - rct_pi
       - rct_di
+      - marbles_buried
+      - immobility_time_s
+      - immobility_fraction
+      - immobility_bouts
+      - immobility_mean_bout_len_s
+      - immobility_latency_s
+
+      - swinging_time_s
+      - swinging_fraction
+      - swinging_bouts
+      - swinging_mean_bout_len_s
+      - swinging_latency_s
+
+      - curling_time_s
+      - curling_fraction
+      - curling_bouts
+      - curling_mean_bout_len_s
+      - curling_latency_s
+
+      - total_mobility_time_s
+      - total_mobility_fraction
+      - total_mobility_bouts
+      - total_mobility_mean_bout_len_s
+
 
 
   posthoc:

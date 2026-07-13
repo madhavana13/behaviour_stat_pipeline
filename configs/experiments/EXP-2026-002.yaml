@@ -45,6 +45,20 @@ assay_instances:
     session: post
     pattern: "*_output_summary.csv"
 
+  OFT3:
+    assay_type: OFT
+    raw_path: data/experiments/EXP-2026-002/raw/OFT3
+    classifier_pattern: "*_Report_summary.csv"
+    session: post
+    pattern: "*_output_summary.csv"
+
+  OFT4:
+    assay_type: OFT
+    raw_path: data/experiments/EXP-2026-002/raw/OFT4
+    classifier_pattern: "*_Report_summary.csv"
+    session: post
+    pattern: "*_output_summary.csv"
+
   NOR:
     assay_type: NOR
     raw_path: data/experiments/EXP-2026-002/raw/nor

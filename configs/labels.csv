@@ -1,20 +1,21 @@
 assay,endpoint,title,y_label
-LM,distance_moved_in_central_alley,Distance moved in central alley,Distance (m)
-LM,distance_moved_in_narrow_alley,Distance moved in narrow alley,Distance (m)
-LM,distance_moved_in_protected_alley,Distance moved in protected alley,Distance (m)
+LM,distance_moved_in_central_alley,Distance moved in central alley,Distance moved in central alley (m)
+LM,distance_moved_in_narrow_alley,Distance moved in narrow alley,Distance moved in narrow alley (m)
+LM,distance_moved_in_protected_alley,Distance moved in protected alley,Distance moved in protected alley (m)
 
-LM,latency_to_enter_narrow_alley,Latency to enter narrow alley,Latency (s)
-LM,latency_to_enter_protected_alley,Latency to enter protected alley,Latency (s)
-LM,latency_to_re_enter_narrow_alley,Latency to re-enter narrow alley,Latency (s)
-LM,latency_to_re_enter_protected_alley,Latency to re-enter protected alley,Latency (s)
+LM,latency_to_enter_narrow_alley,Latency to enter narrow alley,Latency to enter narrow alley (s)
+LM,latency_to_enter_protected_alley,Latency to enter protected alley,Latency to enter protected alley (s)
+LM,latency_to_re_enter_narrow_alley,Latency to re-enter narrow alley,Latency to re-enter narrow alley (s)
+LM,latency_to_re_enter_protected_alley,Latency to re-enter protected alley,Latency to re-enter protected alley (s)
 
-LM,transitions_into_central_alley,Transitions into central alley,Number of transitions (n)
-LM,transitions_into_narrow_alley,Transitions into narrow alley,Number of transitions (n)
-LM,transitions_into_protected_alley,Transitions into protected alley,Number of transitions (n)
+LM,transitions_into_central_alley,Transitions into central alley,Transitions into central alley (n)
+LM,transitions_into_narrow_alley,Transitions into narrow alley,Transitions into narrow alley (n)
+LM,transitions_into_protected_alley,Transitions into protected alley,Transitions into protected alley (n)
 
-LM,time_in_central_alley,Time in central alley,Time (s)
-LM,time_in_narrow_alley,Time in narrow alley,Time (s)
-LM,time_in_protected_alley,Time in protected alley,Time (s)
+LM,time_in_central_alley,Time in central alley,Time in central alley (s)
+LM,time_in_narrow_alley,Time in narrow alley,Time in narrow alley (s)
+LM,time_in_protected_alley,Time in protected alley,Time in protected alley (s)
+
 EPM,count_head_dips,Number of head dips,Count
 EPM,count_psap,Number of PSAP events,Count
 

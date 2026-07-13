@@ -7,6 +7,8 @@ python scripts/run_assay.py --assay nor --config configs/stats.yaml --experiment
 python scripts/run_assay.py --assay lm --config configs/stats.yaml --experiment-config configs/experiments/EXP-2026-002.yaml
 python scripts/run_assay.py --assay oft1 --config configs/stats.yaml --experiment-config configs/experiments/EXP-2026-002.yaml
 python scripts/run_assay.py --assay epm --config configs/stats.yaml --experiment-config configs/experiments/EXP-2026-002.yaml
+python scripts/run_assay.py --assay misc --config configs/stats.yaml --experiment-config configs/experiments/EXP-2026-002.yaml
+
 
 
 
@@ -16,10 +18,8 @@ python scripts/run_stats.py --config configs/stats.yaml --experiment-config conf
 python scripts/run_stats.py --config configs/stats.yaml --experiment-config configs/experiments/EXP-2026-002.yaml --assays vit
 
 
-python scripts/run_figures.py --config configs/stats.yaml --experiment-config configs/experiments/EXP-2026-002.yaml --assays nor
-python scripts/run_figures.py --config configs/stats.yaml --experiment-config configs/experiments/EXP-2026-002.yaml --assays oft
-python scripts/run_figures.py --config configs/stats.yaml --experiment-config configs/experiments/EXP-2026-002.yaml --assays epm
-python scripts/run_figures.py --config configs/stats.yaml --experiment-config configs/experiments/EXP-2026-002.yaml --assays vit
+python scripts/run_figures.py --config configs/stats.yaml --experiment-config configs/experiments/EXP-2026-002.yaml --assays oft2
+python scripts/run_figures.py --config configs/stats.yaml --figures-config configs/figures.yaml --experiment-config configs/experiments/EXP-2026-002.yaml --assays oft2
 
 Run heteroscedasity tests:
 

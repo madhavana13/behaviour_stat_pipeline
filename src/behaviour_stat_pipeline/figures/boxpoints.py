@@ -449,6 +449,35 @@ def plot_group_boxpoints(
         labelcolor=style.text_color,
     )
 
+    # --- Deterministic y-axis policy before annotations/brackets ---
+    # DI endpoints are bounded indices and should show the chance level at 0.
+    # Other non-negative behavioural endpoints should use a zero baseline rather
+    # than Matplotlib auto-scaling, so visual magnitudes are not exaggerated.
+    y_values = pd.to_numeric(d[value_col], errors="coerce").dropna()
+    if y_values.empty:
+        y_values = pd.Series([0.0])
+
+    if is_di:
+        ax.set_ylim(*style.di_ylim)
+        ax.set_yticks(list(style.di_ticks))
+        if style.di_zero_line:
+            ax.axhline(
+                0.0,
+                linewidth=style.di_zero_linewidth,
+                linestyle=style.di_zero_linestyle,
+                color=style.axis_color,
+                alpha=0.5,
+                zorder=1,
+            )
+    else:
+        ymin = float(y_values.min())
+        ymax = float(y_values.max())
+        lower = 0.0 if ymin >= 0 else ymin - 0.08 * max(ymax - ymin, 1.0)
+        top = ymax * style.ylim_top_mult if ymax > 0 else 1.0
+        if top <= lower:
+            top = lower + 1.0
+        ax.set_ylim(lower, top)
+
     if is_di and one_sample_cfg and bool(one_sample_cfg.get("enabled", False)) and one_sample_df is not None and not one_sample_df.empty:
         endpoint_col = str(one_sample_cfg.get("endpoint_col", "endpoint"))
         group_col_os = str(one_sample_cfg.get("group_col", "group"))
@@ -463,36 +492,46 @@ def plot_group_boxpoints(
         )
 
         if labels:
-            ordered = []
+            y0, y1 = ax.get_ylim()
+            yr = y1 - y0 if y1 > y0 else 1.0
+
             for g in g_levels:
                 lab = labels.get(str(g))
-                if lab is not None:
-                    ordered.append(f"{str(g)}: {lab}")
-            if ordered:
-                _draw_corner_text(
-                    ax,
-                    "\n".join(ordered),
-                    position=style.one_sample_text_position,
+                if lab is None:
+                    continue
+
+                # show stars or ns from the primary one-sample table
+                label = str(lab)
+
+                # for DI figures there is usually only one x-level: ""
+                box_positions = [
+                    positions[(g, x)]
+                    for x in x_levels
+                    if (g, x) in positions
+                ]
+                if not box_positions:
+                    continue
+
+                x_center = float(np.mean(box_positions))
+
+                sub_g = d[d[group_col].astype(str) == str(g)]
+                if sub_g.empty:
+                    continue
+
+                y_data_max = float(sub_g[value_col].max())
+                y_text = min(y_data_max + 0.08 * yr, y1 - 0.08 * yr)
+
+                ax.text(
+                    x_center,
+                    y_text,
+                    label,
+                    ha="center",
+                    va="bottom",
                     fontsize=style.one_sample_fontsize,
                     color=style.text_color,
+                    clip_on=False,
                 )
 
-    # --- DI-specific axis handling ---
-    if is_di:
-        ax.set_ylim(-1.0, 1.0)
-        ax.set_yticks([-1.0, -0.5, 0.0, 0.5, 1.0])
-        ax.axhline(
-            0.0,
-            linewidth=1.0,
-            linestyle="--",
-            color=style.axis_color,
-            alpha=0.5,
-            zorder=1,
-        )
-    else:
-        ymax = float(d[value_col].max())
-        top = ymax * style.ylim_top_mult if ymax > 0 else 1.0
-        ax.set_ylim(0, top)
     # --- ANOVA annotation (group / sex / interaction) ---
     # For DI endpoints, significance shown on the plot should come from the
     # primary one-sample test against chance level, not from the secondary ANOVA.

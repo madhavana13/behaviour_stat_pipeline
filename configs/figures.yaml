@@ -11,7 +11,7 @@ figures:
     show_title: false
     figure_size: [2.65, 3.35]
     dpi: 300
-    transparent_background: false
+    transparent_background: true
 
     # Optional debugging labels for individual points
     show_point_ids: false
@@ -92,9 +92,9 @@ figures:
         table: "primary_one_sample"
         endpoint_col: "endpoint"
         group_col: "group"
-        label_col: "t_p_adj_holm"
+        label_col: "w_p_adj_holm"
 
-    formats: ["png"]
+    formats: ["png","pdf"]
 
   specs:
     - name: "Time with objects"
@@ -119,31 +119,30 @@ figures:
       wide_to_long:
         x_col: "object"
         mapping:
-          Familiar: "test_familiar_iz_time"
-          Novel: "test_novel_iz_time"
+          Familiar: "test_familiar_explore_time"
+          Novel: "test_novel_explore_time"
       significance:
         anova_summary:
           enabled: true
           manual_brackets:
             - from: {group: "control", x: "Familiar"}
               to:   {group: "control", x: "Novel"}
-              label: "*"
+              label: "**"
               linewidth: 0.5
               fontsize: 7
               y: 54
               h: 0.8
             - from: {group: "ifs", x: "Familiar"}
               to:   {group: "ifs", x: "Novel"}
-              label: "*"
+              label: "**"
               linewidth: 0.5
               fontsize: 7
               y: 54
               h: 0.8
 
-    - name: "test_total_distance_moved"
-      assay: "nor"
+    - assay: "nor"
       type: "boxpoints"
-      value_label: "Distance moved (m)"
+      value_label: "Distance moved during test (m)"
       x_order: ["Total"]
       group_order: ["control", "ifs", "tail", "cup"]
       figure_size: [2.65, 3.35]
@@ -159,10 +158,9 @@ figures:
         mapping:
           Total: "test_total_distance_moved"
 
-    - name: "Time in Alleys"
-      assay: "lm"
+    - assay: "lm"
       type: "boxpoints"
-      value_label: "Time (s)"
+      value_label: "Time in Alleys (s)"
       x_order: ["Protected", "Centre", "Narrow"]
       group_order: ["control", "ifs"]
       figure_size: [4.4, 3.4]
