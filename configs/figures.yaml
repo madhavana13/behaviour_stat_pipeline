@@ -205,4 +205,16 @@ figures:
   auto_from_correlations:
     enabled: true
     fit_enabled: true
+
+  # Kaplan-Meier curves for every time_to_event endpoint in stats.yaml
+  # (censored animals marked '|'; pooled figure annotated with Cox HR and p_adj)
+  auto_from_time_to_event:
+    enabled: true
+    by_sex: true                      # also write a female | male panel version
+    show_titles: false
+    y_label: "Proportion without event"
+    figure_size: [3.0, 2.6]
+    figure_size_by_sex: [5.2, 2.6]
+    linewidth: 1.2
+    censor_marker_size: 5
     exclude: []

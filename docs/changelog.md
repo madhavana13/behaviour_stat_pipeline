@@ -86,3 +86,31 @@ Checkpoint – Stats audit: correctness fixes, config validation, provenance, re
 ### Known limitations
 - Spearman p-values use the asymptotic t approximation (as R `cor.test(exact = FALSE)`); R's default for small n is exact
 - `exclude_from: sensitivity` rows are loaded but no sensitivity analysis is run yet
+
+2026-10-26 (b)
+Checkpoint – Censored latencies analysed as time-to-event
+
+### Changed outputs
+- LM latencies (`latency_to_[re_]enter_{protected,narrow}_alley`) removed from `secondary_two_way_anova`;
+  ANOVA dropped animals for which the event never happened (in EXP-2026-002: 1 mouse never entered the
+  narrow alley, 5 never re-entered it, 4 of them IFS). They are now in `time_to_event`.
+
+### Added
+- `stats/endpoints/time_to_event.py`: missing latency in a recorded animal is right-censored at that
+  animal's recording length (`time_to_event.duration_col`, e.g. `time_in_arena`), falling back to
+  `assay_instances.<NAME>.trial_duration_s` in the experiment config. Animals without a recording are excluded.
+  Fails if an observed latency exceeds the recording length or no duration is available.
+- Outputs `{ASSAY}_time_to_event.csv`: Cox PH (Efron ties) hazard ratios + 95% CI for group and sex from the
+  additive model, likelihood-ratio p-values for group, sex and the interaction (Type II analogue), and a
+  log-rank test of group stratified by sex; correction across endpoints per term (default Holm).
+  `{ASSAY}_time_to_event_summary.csv`: n, events, censored and Kaplan-Meier median per group and group x sex.
+  HR > 1 = event happens sooner (shorter latency).
+- Config validation: an endpoint listed in both `time_to_event` and `secondary_two_way_anova` is an error.
+- Reference tests for censoring, Cox, LR tests, log-rank and KM medians against R `survival` 3.8.3.
+- Kaplan-Meier figures (`figures/km.py`, `figures.auto_from_time_to_event`): one per time_to_event endpoint,
+  sexes pooled and annotated with HR [95% CI], Cox and log-rank p (with correction named), plus a
+  female | male panel version. Built from the same censoring function as the statistics; censored animals
+  marked '|', n and n censored in the legend. Replaces the LM latency box plots (which dropped censored animals).
+
+### Known limitations
+- Proportional-hazards assumption is not tested yet (no Schoenfeld residual test in statsmodels).

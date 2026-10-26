@@ -251,10 +251,7 @@ secondary_two_way_anova:
       - total_distance_moved
       - distance_moved_in_narrow_alley
       - distance_moved_in_protected_alley
-      - latency_to_enter_narrow_alley
-      - latency_to_enter_protected_alley
-      - latency_to_re_enter_narrow_alley
-      - latency_to_re_enter_protected_alley
+      # latencies: analysed in time_to_event (censored when the event never happens)
       - transitions_into_central_alley
       - transitions_into_narrow_alley
       - transitions_into_protected_alley
@@ -315,7 +312,24 @@ secondary_two_way_anova:
       - name: group_within_sex_1
         a: {group: 0, sex: 1}
         b: {group: 1, sex: 1}
-  
+
+# Latencies where the event may never happen within the trial.
+# Missing latency + recorded animal -> right-censored at the recording length.
+# Recording length per animal: duration_col if present, else the assay's
+# trial_duration_s in the experiment config (assay_instances.<NAME>.trial_duration_s).
+time_to_event:
+  enabled: true
+  factors: [group, sex]
+  duration_col: time_in_arena
+  correction_across_endpoints: holm
+
+  endpoints:
+    lm:
+      - latency_to_enter_protected_alley
+      - latency_to_re_enter_protected_alley
+      - latency_to_enter_narrow_alley
+      - latency_to_re_enter_narrow_alley
+
 correlations:
   enabled: true
 

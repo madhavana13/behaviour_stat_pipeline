@@ -164,6 +164,9 @@ def main() -> None:
         )
         instance_out_figures.mkdir(parents=True, exist_ok=True)
 
+        instance_cfg = (exp_cfg.get("assay_instances", {}) or {}).get(assay_instance.upper(), {}) or {}
+        trial_duration_s = instance_cfg.get("trial_duration_s")
+
         written = run_figures_from_config(
             config=cfg,
             processed_dir=processed_dir,
@@ -175,6 +178,7 @@ def main() -> None:
             group_col=group_col,
             sex_col=sex_col,
             exclusions=exclusions,
+            trial_duration_s=float(trial_duration_s) if trial_duration_s is not None else None,
         )
 
         written_all.extend(written)

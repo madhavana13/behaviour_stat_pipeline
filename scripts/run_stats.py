@@ -40,6 +40,7 @@ from behaviour_stat_pipeline.stats.endpoints.posthoc_cellmeans_prism import (
 )
 
 from behaviour_stat_pipeline.stats.endpoints.correlations import run_correlations
+from behaviour_stat_pipeline.stats.endpoints.time_to_event import run_time_to_event
 from behaviour_stat_pipeline.stats.diagnostics import endpoint_diagnostics, rout_diagnostics
 from behaviour_stat_pipeline.stats.corrections import adjust_pvalues
 from behaviour_stat_pipeline.stats.provenance import build_provenance, write_provenance
@@ -90,6 +91,7 @@ def apply_assay_instance_aliases(cfg, exp_cfg: dict):
         "primary_one_sample_nulls",
         "secondary_two_way_anova_endpoints",
         "diagnostics_endpoints",
+        "time_to_event_endpoints",
     ]
 
     # cfg is a frozen dataclass, but the dict objects inside it are mutable.
@@ -461,6 +463,69 @@ def run_posthoc(df: pd.DataFrame, cfg, assay: str, exclusions: pd.DataFrame,) ->
     log_written(out_path)
 
 
+def trial_durations_from_experiment(exp_cfg: dict) -> dict[str, float]:
+    """assay_instances.<NAME>.trial_duration_s -> {name.lower(): seconds}; must be a positive number."""
+    out = {}
+    for name, inst in (exp_cfg.get("assay_instances", {}) or {}).items():
+        value = (inst or {}).get("trial_duration_s")
+        if value is None:
+            continue
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:
+            raise ValueError(f"assay_instances.{name}.trial_duration_s must be a positive number, got {value!r}")
+        out[name.lower()] = float(value)
+    return out
+
+
+def run_time_to_event_stage(df: pd.DataFrame, cfg, assay: str, exclusions: pd.DataFrame) -> None:
+    """Censored latency endpoints: Cox model + log-rank, corrected across endpoints per term."""
+    if not cfg.time_to_event_enabled:
+        return
+
+    endpoints = cfg.time_to_event_endpoints.get(assay, [])
+    if not endpoints:
+        return
+
+    missing_endpoints = [ep for ep in endpoints if ep not in df.columns]
+    if missing_endpoints:
+        print(f"WARNING [{assay.upper()}]: skipping missing time-to-event endpoints: {missing_endpoints}")
+    available_endpoints = [ep for ep in endpoints if ep in df.columns]
+    if not available_endpoints:
+        return
+
+    test_frames, summary_frames = [], []
+    for ep in available_endpoints:
+        df_ep, excl_info = analysis_df_for_endpoint(
+            df, exclusions, assay=assay, endpoint=ep, cfg=cfg, analysis_scope="primary",
+        )
+        tests, summary = run_time_to_event(
+            df_ep,
+            assay=assay.upper(),
+            endpoint=ep,
+            factors=cfg.time_to_event_factors,
+            trial_duration_s=cfg.trial_durations_s.get(assay),
+            duration_col=cfg.time_to_event_duration_col,
+        )
+        for k, v in excl_info.items():
+            tests[k] = v
+        tests["analysis_scope"] = "primary"
+        test_frames.append(tests)
+        summary_frames.append(summary)
+
+    out = pd.concat(test_frames, ignore_index=True)
+    method = cfg.time_to_event_correction
+    out["p_adj"] = out.groupby("term")["p_value"].transform(lambda s: adjust_pvalues(s, method=method))
+    out["correction_method"] = method
+    out["significance_label"] = out["p_adj"].apply(_significance_label)
+
+    out_path = cfg.out_tables / f"{assay.upper()}_time_to_event.csv"
+    write_table(out, out_path, cfg)
+    log_written(out_path)
+
+    summary_path = cfg.out_tables / f"{assay.upper()}_time_to_event_summary.csv"
+    write_table(pd.concat(summary_frames, ignore_index=True), summary_path, cfg)
+    log_written(summary_path)
+
+
 def run_diagnostics(df: pd.DataFrame, cfg, assay: str, exclusions: pd.DataFrame) -> None:
     if not getattr(cfg, "diagnostics_enabled", False):
         return
@@ -693,6 +758,7 @@ def main() -> None:
         out_figures=Path(exp_paths.get("out_figures", cfg.out_figures)),
     )
     cfg = apply_assay_instance_aliases(cfg, exp_cfg)
+    cfg = replace(cfg, trial_durations_s=trial_durations_from_experiment(exp_cfg))
     assays = cfg.assays if args.assays is None else [a.lower() for a in args.assays]
 
     subjects = read_subjects(cfg.subjects_path)
@@ -740,6 +806,7 @@ def main() -> None:
         run_primary_tests(df, assay_cfg, assay,exclusions)
         run_anova(df, assay_cfg, assay, exclusions)
         run_posthoc(df, assay_cfg, assay, exclusions)
+        run_time_to_event_stage(df, assay_cfg, assay, exclusions)
         run_diagnostics(df, assay_cfg, assay, exclusions)
         run_exploratory(df, assay_cfg, assay, exclusions)
 

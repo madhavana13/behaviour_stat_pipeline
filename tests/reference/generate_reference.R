@@ -137,6 +137,40 @@ ref$ols_hc3 <- list(
 )
 
 # ---------------------------------------------------------------------------
+# Time to event: latency right-censored at the animal's recording length;
+# animals without a recording are excluded. Cox (Efron ties), LR tests, log-rank
+# stratified by sex, Kaplan-Meier medians.
+# ---------------------------------------------------------------------------
+suppressPackageStartupMessages(library(survival))
+s <- d[!is.na(d$rec_s), ]
+s$time <- ifelse(is.na(s$latency), s$rec_s, s$latency)
+s$event <- as.integer(!is.na(s$latency))
+cox_add <- coxph(Surv(time, event) ~ group + sex, data = s, ties = "efron")
+cox_int <- coxph(Surv(time, event) ~ group * sex, data = s, ties = "efron")
+cox_g <- coxph(Surv(time, event) ~ group, data = s, ties = "efron")
+cox_s <- coxph(Surv(time, event) ~ sex, data = s, ties = "efron")
+ci <- exp(confint(cox_add))
+wald <- summary(cox_add)$coefficients
+lr <- function(full, reduced) 2 * (full$loglik[2] - reduced$loglik[2])
+lrank <- survdiff(Surv(time, event) ~ group + strata(sex), data = s)
+km_g <- summary(survfit(Surv(time, event) ~ group, data = s))$table[, "median"]
+km_gs <- summary(survfit(Surv(time, event) ~ group + sex, data = s))$table[, "median"]
+ref$time_to_event <- list(
+  n = nrow(s), n_events = sum(s$event), n_censored = sum(s$event == 0),
+  group = list(hr = exp(coef(cox_add)[["groupifs"]]), ci_low = ci["groupifs", 1], ci_high = ci["groupifs", 2],
+               wald_p = wald["groupifs", "Pr(>|z|)"], lr_chi2 = lr(cox_add, cox_s),
+               p = pchisq(lr(cox_add, cox_s), 1, lower.tail = FALSE)),
+  sex = list(hr = exp(coef(cox_add)[["sexmale"]]), ci_low = ci["sexmale", 1], ci_high = ci["sexmale", 2],
+             wald_p = wald["sexmale", "Pr(>|z|)"], lr_chi2 = lr(cox_add, cox_g),
+             p = pchisq(lr(cox_add, cox_g), 1, lower.tail = FALSE)),
+  interaction = list(lr_chi2 = lr(cox_int, cox_add), p = pchisq(lr(cox_int, cox_add), 1, lower.tail = FALSE)),
+  logrank = list(chi2 = lrank$chisq, p = pchisq(lrank$chisq, 1, lower.tail = FALSE)),
+  # names like "group=control" and "group=control, sex=female"; NA = median not reached
+  km_median_group = as.list(km_g),
+  km_median_group_sex = as.list(km_gs)
+)
+
+# ---------------------------------------------------------------------------
 # Multiple-comparison adjustments on a fixed p-value vector
 # ---------------------------------------------------------------------------
 p_in <- c(0.001, 0.008, 0.012, 0.03, 0.041, 0.2, 0.5, 0.9)

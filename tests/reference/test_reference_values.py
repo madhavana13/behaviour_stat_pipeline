@@ -18,6 +18,7 @@ from behaviour_stat_pipeline.stats.corrections import adjust_pvalues
 from behaviour_stat_pipeline.stats.endpoints.correlations import _ols_one, run_correlations
 from behaviour_stat_pipeline.stats.endpoints.one_sample import run_one_sample_by_group
 from behaviour_stat_pipeline.stats.endpoints.posthoc_cellmeans_prism import run_posthoc_cellmeans_prism
+from behaviour_stat_pipeline.stats.endpoints.time_to_event import build_survival_data, run_time_to_event
 from behaviour_stat_pipeline.stats.endpoints.two_way_anova import run_two_way_anova
 
 HERE = Path(__file__).resolve().parent
@@ -147,6 +148,70 @@ def test_ols_hc3(df):
     close(df_resid, ref["df_resid"])
     # Small-sample inference uses the t distribution on residual df, not the normal
     close(p, ref["p_t"], rtol=1e-6)
+
+
+# ---------------------------------------------------------------------------
+# Time to event (censored latencies)
+# ---------------------------------------------------------------------------
+
+@pytest.fixture(scope="module")
+def tte(df):
+    return run_time_to_event(df, assay="REF", endpoint="latency", factors=["group", "sex"],
+                             trial_duration_s=None, duration_col="rec_s")
+
+
+def test_time_to_event_censoring(tte):
+    tests, _ = tte
+    ref = REF["time_to_event"]
+    row = tests.iloc[0]
+    assert (row["n"], row["n_events"], row["n_censored"]) == (ref["n"], ref["n_events"], ref["n_censored"])
+
+
+def test_time_to_event_cox(tte):
+    tests, _ = tte
+    ref = REF["time_to_event"]
+    by_term = tests.set_index("term")
+    for term in ["group", "sex"]:
+        row, r = by_term.loc[term], ref[term]
+        close(row["hazard_ratio"], r["hr"], rtol=1e-6)
+        close(row["hr_ci_low"], r["ci_low"], rtol=1e-6)
+        close(row["hr_ci_high"], r["ci_high"], rtol=1e-6)
+        close(row["wald_p"], r["wald_p"], rtol=1e-6)
+        close(row["lr_chi2"], r["lr_chi2"], rtol=1e-6)
+        close(row["p_value"], r["p"], rtol=1e-6)
+    close(by_term.loc["group:sex", "lr_chi2"], ref["interaction"]["lr_chi2"], rtol=1e-6)
+    close(by_term.loc["group:sex", "p_value"], ref["interaction"]["p"], rtol=1e-6)
+
+
+def test_time_to_event_logrank(tte):
+    tests, _ = tte
+    row = tests[tests["model"] == "log-rank"].iloc[0]
+    close(row["lr_chi2"], REF["time_to_event"]["logrank"]["chi2"], rtol=1e-6)
+    close(row["p_value"], REF["time_to_event"]["logrank"]["p"], rtol=1e-6)
+
+
+def test_time_to_event_km_median(tte):
+    _, summary = tte
+    ref = {**REF["time_to_event"]["km_median_group"], **REF["time_to_event"]["km_median_group_sex"]}
+    ref = {k.replace(" ", ""): v for k, v in ref.items()}
+    for _, row in summary.iterrows():
+        cols = row["grouping"].split("+")
+        key = ",".join(f"{c}={row[c]}" for c in cols)
+        expected = ref[key]
+        if expected is None:
+            assert np.isnan(row["km_median"])
+        else:
+            close(row["km_median"], expected)
+
+
+def test_time_to_event_rejects_latency_beyond_trial(df):
+    with pytest.raises(ValueError, match="exceed the recording length"):
+        build_survival_data(df, "latency", trial_duration_s=60.0)
+
+
+def test_time_to_event_requires_duration(df):
+    with pytest.raises(ValueError, match="no trial duration"):
+        build_survival_data(df, "latency", trial_duration_s=None)
 
 
 # ---------------------------------------------------------------------------

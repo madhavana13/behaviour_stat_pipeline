@@ -76,6 +76,7 @@ assay_instances:
     raw_path: data/experiments/EXP-2026-002/raw/lm
     classifier_pattern: "*_Report_summary.csv"
     session: post
+    trial_duration_s: 300   # nominal; per-animal time_in_arena is used when available
 
   MISC:
     assay_type: MISC

@@ -33,6 +33,17 @@ def main() -> None:
             rows.append({"mouse_id": f"M{i:02d}", "group": group, "sex": sex,
                          "y": round(y, 4), "x2": round(x2, 4), "di": round(di, 4)})
     df = pd.DataFrame(rows)
+
+    # Latency with right-censoring (separate RNG stream so the columns above are unchanged).
+    # Per-animal recording length ~300 s; events after it are censored (latency missing).
+    rng_t = np.random.default_rng(7)
+    df["rec_s"] = np.round(rng_t.uniform(295, 304, len(df)), 3)
+    rate = 1 / np.where(df["group"] == "ifs", 260, 110) * np.where(df["sex"] == "male", 0.8, 1.0)
+    t = np.round(rng_t.exponential(1 / rate), 3)
+    df["latency"] = np.where(t <= df["rec_s"], t, np.nan)
+    df.loc[df.index[-1], "rec_s"] = np.nan  # one animal without a recording -> excluded, not censored
+    df.loc[df.index[-1], "latency"] = np.nan
+
     for col in ["y", "x2", "di"]:
         assert df[col].is_unique, f"ties in {col}; change the seed"
     assert (df["di"] != 0).all()

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional, Any
 
@@ -51,6 +51,7 @@ _ALLOWED_KEYS = {
         "factor_orders", "endpoints", "posthoc",
     },
     "secondary_two_way_anova.posthoc": {"enabled", "method", "correction", "selected_pairs"},
+    "time_to_event": {"enabled", "factors", "duration_col", "correction_across_endpoints", "endpoints"},
     "correlations": {"enabled", "defaults", "default_groupings", "correction", "min_n", "specs"},
     "correlations.spec": {
         "assay", "x", "y", "name", "method", "groupings", "filter", "covariates", "se", "cluster_col",
@@ -108,6 +109,22 @@ def validate_stats_config(cfg: dict) -> None:
     if posthoc:
         check_choice(posthoc.get("method", "cell_means_prism"), {"cell_means_prism"}, "secondary_two_way_anova.posthoc.method")
         check_choice(posthoc.get("correction", "sidak"), {"sidak"}, "secondary_two_way_anova.posthoc.correction")
+
+    tte = cfg.get("time_to_event", {}) or {}
+    check_keys(tte, "time_to_event", "time_to_event")
+    check_choice(
+        tte.get("correction_across_endpoints", "holm"), _MULTITEST_METHODS,
+        "time_to_event.correction_across_endpoints",
+    )
+    check_endpoint_lists(tte.get("endpoints"), "time_to_event.endpoints")
+    # A censored latency must not also be analysed as if missing at random
+    for assay, eps in (tte.get("endpoints") or {}).items():
+        both = sorted(set(eps or []) & set((sec.get("endpoints") or {}).get(assay, []) or []))
+        if both:
+            errors.append(
+                f"time_to_event.endpoints.{assay}: {both} also listed in secondary_two_way_anova.endpoints; "
+                f"ANOVA would drop censored animals"
+            )
 
     corr = cfg.get("correlations", {}) or {}
     check_keys(corr, "correlations", "correlations")
@@ -170,6 +187,13 @@ class StatsConfig:
     correlations_specs: list[dict]
     correlations_defaults: dict
     correlations_default_groupings: list[list[str]]
+    time_to_event_enabled: bool = False
+    time_to_event_factors: list[str] = field(default_factory=lambda: ["group", "sex"])
+    time_to_event_duration_col: Optional[str] = None
+    time_to_event_correction: str = "holm"
+    time_to_event_endpoints: dict[str, list[str]] = field(default_factory=dict)
+    # From the experiment config: assay instance (lower case) -> nominal trial length in s
+    trial_durations_s: dict[str, float] = field(default_factory=dict)
     # Set per run from provenance; stamped onto every output table
     run_id: str = ""
 
@@ -247,6 +271,8 @@ def load_stats_config(path: str | Path) -> StatsConfig:
     correlations_defaults = dict(corr.get("defaults", {}) or {})
     correlations_default_groupings = list(corr.get("default_groupings", [[]]) or [[]])
 
+    tte = cfg.get("time_to_event", {}) or {}
+
 
     return StatsConfig(
         mouse_id_col=mouse_id_col,
@@ -287,6 +313,11 @@ def load_stats_config(path: str | Path) -> StatsConfig:
         correlations_specs=correlations_specs,
         correlations_defaults=correlations_defaults,
         correlations_default_groupings=correlations_default_groupings,
+        time_to_event_enabled=bool(tte.get("enabled", False)),
+        time_to_event_factors=list(tte.get("factors", ["group", "sex"])),
+        time_to_event_duration_col=tte.get("duration_col") or None,
+        time_to_event_correction=str(tte.get("correction_across_endpoints", "holm")),
+        time_to_event_endpoints=dict(tte.get("endpoints", {}) or {}),
     )
 
 

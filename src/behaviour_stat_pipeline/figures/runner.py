@@ -8,8 +8,10 @@ import pandas as pd
 
 from .boxpoints import plot_group_boxpoints
 from .common import PlotStyle, require_columns
+from .km import plot_km
 from .scatter import plot_group_scatter
 from behaviour_stat_pipeline.common.exclusions import apply_exclusions_for_endpoint
+from behaviour_stat_pipeline.stats.endpoints.time_to_event import build_survival_data
 
 def _make_long_from_mapping(
     df: pd.DataFrame,
@@ -309,6 +311,45 @@ def _auto_scatter_specs_from_correlations(
     return out_specs
 
 
+def _auto_km_specs_from_time_to_event(
+    *,
+    config: Dict[str, Any],
+    fig_cfg: Dict[str, Any],
+    assay: str,
+    df_columns: List[str],
+    label_map=None,
+) -> List[Dict[str, Any]]:
+    """One pooled-sex KM figure per time_to_event endpoint, plus a by-sex version if enabled."""
+    auto = fig_cfg.get("auto_from_time_to_event", {}) or {}
+    if not auto.get("enabled", False):
+        return []
+
+    endpoints = ((config.get("time_to_event", {}) or {}).get("endpoints", {}) or {}).get(assay.lower(), []) or []
+    missing = [e for e in endpoints if str(e) not in df_columns]
+    if missing:
+        raise ValueError(f"[figures:auto_from_time_to_event] {assay}: endpoints not in processed CSV: {missing}")
+
+    variants = [False] + ([True] if auto.get("by_sex", True) else [])
+    out_specs: List[Dict[str, Any]] = []
+    for endpoint in endpoints:
+        endpoint = str(endpoint)
+        for by_sex in variants:
+            out_specs.append({
+                "name": f"km_{endpoint}" + ("_by_sex" if by_sex else ""),
+                "assay": assay.lower(),
+                "type": "km",
+                "endpoint": endpoint,
+                "by_sex": by_sex,
+                "x_label": _label_for_axis(label_map, assay, endpoint) or f"{endpoint} (s)",
+                "y_label": auto.get("y_label", "Proportion without event"),
+                "title": _label_for_title(label_map, assay, endpoint) if auto.get("show_titles", False) else None,
+                "figure_size": auto.get("figure_size_by_sex" if by_sex else "figure_size"),
+                "linewidth": auto.get("linewidth", 1.2),
+                "censor_marker_size": auto.get("censor_marker_size", 5.0),
+            })
+    return out_specs
+
+
 def run_figures_from_config(
     *,
     config: Dict[str, Any],
@@ -321,6 +362,7 @@ def run_figures_from_config(
     group_col: str = "group",
     sex_col: str = "sex",
     exclusions: pd.DataFrame | None = None,
+    trial_duration_s: float | None = None,
 ) -> List[Path]:
     fig_cfg = config.get("figures", {})
     if not fig_cfg or not fig_cfg.get("enabled", False):
@@ -423,12 +465,22 @@ def run_figures_from_config(
     manual_names = {str(s.get("name")) for s in specs if isinstance(s, dict) and "name" in s}
     specs.extend([s for s in auto_specs if str(s.get("name")) not in manual_names])
 
+    auto_km_specs = _auto_km_specs_from_time_to_event(
+        config=config,
+        fig_cfg=fig_cfg,
+        assay=assay_config_key,
+        df_columns=list(df.columns),
+        label_map=label_map,
+    )
+    manual_names = {str(s.get("name")) for s in specs if isinstance(s, dict) and "name" in s}
+    specs.extend([s for s in auto_km_specs if str(s.get("name")) not in manual_names])
+
     for spec in specs:
         if str(spec.get("assay", "")).lower() != assay_config_key.lower():
             continue
 
         plot_type = str(spec.get("type", "")).lower()
-        if plot_type not in ("boxpoints", "scatter"):
+        if plot_type not in ("boxpoints", "scatter", "km"):
             raise ValueError(f"Unsupported figure type: {spec.get('type')}")
 
         name = str(spec.get("name", f"{assay}_figure"))
@@ -628,6 +680,65 @@ def run_figures_from_config(
             figure_log_records.append({
                 "figure_name": name,
                 "plot_type": "scatter",
+                "endpoint": exclusion_endpoint,
+                "n_rows_processed_pre_exclusion": len(df),
+                "n_rows_plotted_after_exclusion": len(df_plot),
+                "n_mice_processed_pre_exclusion": df[mouse_id_col].nunique(),
+                "n_mice_plotted_after_exclusion": df_plot[mouse_id_col].nunique(),
+                **excl_info,
+                "output_files": [str(p) for p in out_paths],
+            })
+
+        elif plot_type == "km":
+            endpoint = spec.get("endpoint")
+            if not endpoint:
+                raise ValueError(f"Figure spec '{name}' (km) requires endpoint.")
+            endpoint = str(endpoint)
+
+            df_plot, excl_info = _apply_plot_exclusions(
+                df,
+                exclusions,
+                assay=assay,
+                endpoint=endpoint,
+                mouse_id_col=mouse_id_col,
+            )
+            # Same censoring rule as the statistics
+            surv = build_survival_data(
+                df_plot,
+                endpoint,
+                trial_duration_s=trial_duration_s,
+                duration_col=(config.get("time_to_event", {}) or {}).get("duration_col") or None,
+            ).dropna(subset=[group_col, sex_col])
+
+            tests_path = out_figures.parent / "tables" / f"{output_prefix}_time_to_event.csv"
+            tests_df = pd.read_csv(tests_path) if tests_path.exists() else None
+            if tests_df is None and not spec.get("by_sex", False):
+                print(f"WARNING [{output_prefix}]: {tests_path} not found; KM figure '{name}' has no test annotation. "
+                      f"Run run_stats.py first.")
+
+            plot_km(
+                surv,
+                out_paths=out_paths,
+                style=style,
+                group_col=group_col,
+                sex_col=sex_col,
+                group_order=spec.get("group_order", defaults.get("group_order", None)),
+                sex_order=spec.get("sex_order", ["female", "male"]),
+                by_sex=bool(spec.get("by_sex", False)),
+                x_label=str(spec.get("x_label", "Time (s)")),
+                y_label=str(spec.get("y_label", "Proportion without event")),
+                title=spec.get("title", None) or None,
+                tests=tests_df,
+                endpoint=endpoint,
+                linewidth=float(spec.get("linewidth", 1.2)),
+                censor_marker_size=float(spec.get("censor_marker_size", 5.0)),
+                figure_size=tuple(spec["figure_size"]) if spec.get("figure_size") else None,
+            )
+
+            written.extend(out_paths)
+            figure_log_records.append({
+                "figure_name": name,
+                "plot_type": "km",
                 "endpoint": exclusion_endpoint,
                 "n_rows_processed_pre_exclusion": len(df),
                 "n_rows_plotted_after_exclusion": len(df_plot),
