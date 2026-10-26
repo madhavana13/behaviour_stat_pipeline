@@ -57,18 +57,6 @@ assays:
 
 primary_one_sample:
   enabled: true
-  group_col: group
-  collapse_over: [sex]
-  correction: holm
-  run_ttest: true
-  run_wilcoxon: true
-
-  nulls:
-    nor:
-      di_explore: 0.0
-      di_iz: 0.0
-    misc:
-      rct_di: 0.0
 
   # which columns define "groups" to test within (sex collapsed by default)
   group_col: group
@@ -88,6 +76,8 @@ primary_one_sample:
     nor:
       di_explore: 0.0
       di_iz: 0.0
+    misc:
+      rct_di: 0.0
     sit: {}   # fill later
 
 diagnostics:
@@ -137,7 +127,6 @@ diagnostics:
       - transitions_into_open_arms
     vit: 
       - delta_after_minus_before__hand__time_in_right_lower_quadrant
-      - hand__Before__time_in_right_lower_quadrant
       - hand__Before__time_in_right_lower_quadrant
       - hand__After__time_in_right_lower_quadrant
       - standing__Before__distance_moved_in_left_lower_quadrant
@@ -250,7 +239,6 @@ secondary_two_way_anova:
       - transitions_into_open_arms
     vit: 
       - delta_after_minus_before__hand__time_in_right_lower_quadrant
-      - hand__Before__time_in_right_lower_quadrant
       - hand__Before__time_in_right_lower_quadrant
       - hand__After__time_in_right_lower_quadrant
       - standing__Before__distance_moved_in_left_lower_quadrant

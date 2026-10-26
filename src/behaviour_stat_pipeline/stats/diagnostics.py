@@ -44,7 +44,7 @@ def rout_endpoint_flags(
     Approach:
       - Fit robust intercept-only model y = mu + e using statsmodels.RLM
       - Compute (approx) studentized residuals
-      - Two-sided p-values from Normal approximation
+      - Two-sided p-values from a t(n-1) approximation
       - FDR correction at level q (Prism's ROUT 'Q')
 
     Notes:
@@ -267,18 +267,27 @@ def endpoint_diagnostics(
         vmax = float(np.nanmax(x_all)) if n_nonmissing else np.nan
         cv = _cv(mean, sd)
 
-        # Robust outlier flagging by MAD z-score (no exclusions)
-        if id_col in df.columns and n_nonmissing >= 5 and not np.isnan(mad) and mad > 0:
-            med = np.nanmedian(x_all)
-            robust_z = 0.6745 * (x_all - med) / mad
-            mask = robust_z.abs() > mad_z_thresh
-            flagged = df.loc[mask.fillna(False), [id_col]].copy()
-            flagged["assay"] = assay
-            flagged["endpoint"] = ep
-            flagged["value"] = x_all[mask.fillna(False)].values
-            flagged["robust_z_mad"] = robust_z[mask.fillna(False)].values
-            for _, r in flagged.iterrows():
-                flag_rows.append(r.to_dict())
+        # Robust outlier flagging by MAD z-score (no exclusions), within each group cell
+        # so that genuine group differences are not flagged as outliers
+        if id_col in df.columns:
+            if group_cols:
+                cells = x_all.groupby([df[c] for c in group_cols], dropna=False, observed=True)
+            else:
+                cells = [(None, x_all)]
+            for _, x_cell in cells:
+                x_cell = x_cell.dropna()
+                cell_mad = _mad(x_cell)
+                if x_cell.size < 5 or np.isnan(cell_mad) or cell_mad <= 0:
+                    continue
+                robust_z = 0.6745 * (x_cell - x_cell.median()) / cell_mad
+                mask = robust_z.abs() > mad_z_thresh
+                flagged = df.loc[mask[mask].index, [id_col] + list(group_cols)].copy()
+                flagged["assay"] = assay
+                flagged["endpoint"] = ep
+                flagged["value"] = x_cell[mask].values
+                flagged["robust_z_mad"] = robust_z[mask].values
+                for _, r in flagged.iterrows():
+                    flag_rows.append(r.to_dict())
 
         # Variance per group cell
         var_table = None

@@ -8,6 +8,128 @@ import pandas as pd
 import yaml
 
 
+class ConfigError(ValueError):
+    """Raised when a config file is malformed or uses unsupported options."""
+
+
+class _UniqueKeyLoader(yaml.SafeLoader):
+    """SafeLoader that rejects duplicate mapping keys instead of silently keeping the last one."""
+
+
+def _construct_unique_mapping(loader: _UniqueKeyLoader, node: yaml.MappingNode, deep: bool = False):
+    seen = set()
+    for key_node, _ in node.value:
+        key = loader.construct_object(key_node, deep=deep)
+        if key in seen:
+            raise ConfigError(
+                f"Duplicate key {key!r} in {node.start_mark.name}, line {key_node.start_mark.line + 1}"
+            )
+        seen.add(key)
+    return loader.construct_mapping(node, deep=deep)
+
+
+_UniqueKeyLoader.add_constructor(yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, _construct_unique_mapping)
+
+
+def load_yaml_strict(path: str | Path) -> dict:
+    """Load YAML, failing on duplicate keys."""
+    with Path(path).open("r", encoding="utf-8") as f:
+        return yaml.load(f, Loader=_UniqueKeyLoader) or {}
+
+
+# Keys accepted in each stats section. Anything else is a typo or an unsupported
+# option and must fail, not fall back to a default.
+_ALLOWED_KEYS = {
+    "primary_one_sample": {
+        "enabled", "group_col", "collapse_over", "correction", "run_ttest", "run_wilcoxon", "nulls",
+    },
+    "diagnostics": {
+        "enabled", "groupings", "endpoints", "min_n_test", "var_ratio_thresh", "mad_z_thresh",
+    },
+    "secondary_two_way_anova": {
+        "enabled", "type", "include_interaction", "factors", "correction_across_endpoints",
+        "factor_orders", "endpoints", "posthoc",
+    },
+    "secondary_two_way_anova.posthoc": {"enabled", "method", "correction", "selected_pairs"},
+    "correlations": {"enabled", "defaults", "default_groupings", "correction", "min_n", "specs"},
+    "correlations.spec": {
+        "assay", "x", "y", "name", "method", "groupings", "filter", "covariates", "se", "cluster_col",
+    },
+}
+
+_MULTITEST_METHODS = {"none", "bonferroni", "holm", "sidak", "fdr_bh", "fdr_by"}
+
+
+def validate_stats_config(cfg: dict) -> None:
+    """
+    Check the stats sections for unknown keys, unsupported methods and duplicated endpoints.
+    Collects every problem and raises one ConfigError listing them all.
+    """
+    errors: list[str] = []
+
+    def check_keys(section: dict, allowed_key: str, where: str) -> None:
+        if not isinstance(section, dict):
+            errors.append(f"{where}: expected a mapping, got {type(section).__name__}")
+            return
+        unknown = sorted(set(section) - _ALLOWED_KEYS[allowed_key])
+        if unknown:
+            errors.append(f"{where}: unknown keys {unknown}; allowed: {sorted(_ALLOWED_KEYS[allowed_key])}")
+
+    def check_choice(value: Any, choices: set, where: str) -> None:
+        if str(value).lower() not in choices:
+            errors.append(f"{where}: {value!r} not supported; choose one of {sorted(choices)}")
+
+    def check_endpoint_lists(by_assay: Any, where: str) -> None:
+        for assay, eps in (by_assay or {}).items():
+            eps = list(eps or [])
+            dupes = sorted({e for e in eps if eps.count(e) > 1})
+            if dupes:
+                errors.append(f"{where}.{assay}: duplicated endpoints {dupes}")
+
+    pos = cfg.get("primary_one_sample", {}) or {}
+    check_keys(pos, "primary_one_sample", "primary_one_sample")
+    # Only Holm is implemented for the one-sample family (see endpoints/one_sample.py)
+    check_choice(pos.get("correction", "holm"), {"holm", "none"}, "primary_one_sample.correction")
+
+    diag = cfg.get("diagnostics", {}) or {}
+    check_keys(diag, "diagnostics", "diagnostics")
+    check_endpoint_lists(diag.get("endpoints"), "diagnostics.endpoints")
+
+    sec = cfg.get("secondary_two_way_anova", {}) or {}
+    check_keys(sec, "secondary_two_way_anova", "secondary_two_way_anova")
+    check_choice(sec.get("type", 3), {"2", "3"}, "secondary_two_way_anova.type")
+    check_choice(
+        sec.get("correction_across_endpoints", "none"), _MULTITEST_METHODS,
+        "secondary_two_way_anova.correction_across_endpoints",
+    )
+    check_endpoint_lists(sec.get("endpoints"), "secondary_two_way_anova.endpoints")
+    posthoc = sec.get("posthoc", {}) or {}
+    check_keys(posthoc, "secondary_two_way_anova.posthoc", "secondary_two_way_anova.posthoc")
+    if posthoc:
+        check_choice(posthoc.get("method", "cell_means_prism"), {"cell_means_prism"}, "secondary_two_way_anova.posthoc.method")
+        check_choice(posthoc.get("correction", "sidak"), {"sidak"}, "secondary_two_way_anova.posthoc.correction")
+
+    corr = cfg.get("correlations", {}) or {}
+    check_keys(corr, "correlations", "correlations")
+    check_choice(corr.get("correction", "fdr_bh"), _MULTITEST_METHODS, "correlations.correction")
+    defaults = corr.get("defaults", {}) or {}
+    check_keys(defaults, "correlations.spec", "correlations.defaults")
+    for i, spec in enumerate(corr.get("specs", []) or []):
+        where = f"correlations.specs[{i}]"
+        check_keys(spec, "correlations.spec", where)
+        if not isinstance(spec, dict):
+            continue
+        merged = {**defaults, **spec}
+        for k in ("assay", "x", "y"):
+            if not merged.get(k):
+                errors.append(f"{where}: missing required key '{k}'")
+        check_choice(merged.get("method", "spearman"), {"pearson", "spearman", "ols"}, f"{where}.method")
+        check_choice(merged.get("se", "robust_hc3"), {"robust_hc3", "robust_hc1", "cluster", "classical"}, f"{where}.se")
+
+    if errors:
+        raise ConfigError("Invalid stats config:\n  - " + "\n  - ".join(errors))
+
+
 @dataclass(frozen=True)
 class StatsConfig:
     mouse_id_col: str
@@ -46,6 +168,10 @@ class StatsConfig:
     correlations_correction: str
     correlations_min_n: int
     correlations_specs: list[dict]
+    correlations_defaults: dict
+    correlations_default_groupings: list[list[str]]
+    # Set per run from provenance; stamped onto every output table
+    run_id: str = ""
 
 
     def to_dict(self) -> Dict[str, Any]:
@@ -60,8 +186,8 @@ class StatsConfig:
 
 def load_stats_config(path: str | Path) -> StatsConfig:
     path = Path(path)
-    with path.open("r", encoding="utf-8") as f:
-        cfg = yaml.safe_load(f)
+    cfg = load_yaml_strict(path)
+    validate_stats_config(cfg)
 
     mouse_id_col = cfg["id_cols"]["mouse"]
     paths = cfg["paths"]
@@ -118,6 +244,8 @@ def load_stats_config(path: str | Path) -> StatsConfig:
             raise TypeError(f"correlations.specs[{i}] must be a dict")
 
     correlations_specs = correlations_specs_raw
+    correlations_defaults = dict(corr.get("defaults", {}) or {})
+    correlations_default_groupings = list(corr.get("default_groupings", [[]]) or [[]])
 
 
     return StatsConfig(
@@ -156,7 +284,9 @@ def load_stats_config(path: str | Path) -> StatsConfig:
         correlations_enabled=correlations_enabled,
         correlations_correction=correlations_correction,
         correlations_min_n=correlations_min_n,
-        correlations_specs=correlations_specs
+        correlations_specs=correlations_specs,
+        correlations_defaults=correlations_defaults,
+        correlations_default_groupings=correlations_default_groupings,
     )
 
 

@@ -59,3 +59,30 @@ Checkpoint – Schema Normalization + Robust OFT Handling
 | `endpoint`     | `*` for all endpoints, or exact endpoint name |
 | `exclude_from` | `primary`, `sensitivity`, or `all`            |
 | `reason`       | required free-text reason                     |
+
+2026-10-26
+Checkpoint – Stats audit: correctness fixes, config validation, provenance, reference tests
+
+### Changed outputs (re-run stats for any experiment analysed before this date)
+- `primary_one_sample`: duplicate YAML keys silently dropped `misc.rct_di`; MISC one-sample test now runs
+- Correlations: `defaults` and `default_groupings` were ignored (pooled only); now honoured
+- Correlations and diagnostics now apply endpoint-level exclusions (previously only one-sample/ANOVA/posthoc did)
+- Diagnostics: MAD-z flags computed within each grouping cell (previously pooled); ROUT uses the file's grouping (previously always `group`)
+- VIT: duplicated endpoint removed from ANOVA and diagnostics lists (Holm family 8 → 7)
+- Posthoc: `posthoc.enabled: false` is now respected
+- OLS with robust/cluster SE: p-values use t(df_resid) instead of the normal (was anti-conservative); no current spec uses OLS
+- Two-way ANOVA `type: 3` now uses sum-to-zero contrasts (Treatment coding gave wrong Type III tests); `type: 2` results unchanged
+
+### Added
+- Config validation (`stats/common.py`): duplicate YAML keys, unknown keys, unsupported methods and duplicated endpoints fail with a list of all problems
+- Provenance (`stats/provenance.py`): `{ASSAY}_provenance.json` per run (git commit + dirty files, SHA-256 of configs and inputs, package versions); every table carries `run_id`
+- `run_stats.py --require-clean`: refuse to run with uncommitted changes (use for reported results)
+- Reference validation (`tests/reference/`): one-sample t/Wilcoxon, Type II/III ANOVA, posthoc, Pearson/Spearman, OLS-HC3 and p-value adjustments checked against base R 4.5.0
+
+### Fixed
+- A configured exclusion file that does not exist is now an error (previously: silently no exclusions)
+- Smoke tests use the EXP-2026-002 OFT instances (OFT1–4)
+
+### Known limitations
+- Spearman p-values use the asymptotic t approximation (as R `cor.test(exact = FALSE)`); R's default for small n is exact
+- `exclude_from: sensitivity` rows are loaded but no sensitivity analysis is run yet

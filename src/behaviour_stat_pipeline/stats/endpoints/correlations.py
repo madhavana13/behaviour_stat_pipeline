@@ -122,18 +122,22 @@ def _ols_one(
     X = sm.add_constant(X, has_constant="add")
 
     model = sm.OLS(yv, X)
+    # use_t: robust covariances default to normal-based p-values in statsmodels,
+    # which are anti-conservative at behavioural sample sizes
     if se == "robust_hc3":
-        res = model.fit(cov_type="HC3")
+        res = model.fit(cov_type="HC3", use_t=True)
     elif se == "robust_hc1":
-        res = model.fit(cov_type="HC1")
+        res = model.fit(cov_type="HC1", use_t=True)
     elif se == "cluster":
         if not cluster_col:
             raise ValueError("se='cluster' requires cluster_col")
         # cluster groups aligned to d after dropna
         groups = df.loc[d.index, cluster_col]
-        res = model.fit(cov_type="cluster", cov_kwds={"groups": groups})
+        res = model.fit(cov_type="cluster", cov_kwds={"groups": groups}, use_t=True)
+    elif se == "classical":
+        res = model.fit()
     else:
-        res = model.fit()  # classical
+        raise ValueError(f"Unknown se option: {se!r}")
 
     beta_x = float(res.params[x])
     se_x = float(res.bse[x])
@@ -168,11 +172,11 @@ def run_correlations(
     assay: str,
     df: pd.DataFrame,
     cfg: Dict[str, Any],
-    out_csv_path: str,
+    out_csv_path: Optional[str] = None,
 ) -> pd.DataFrame:
     """
     Run correlations/regressions for a given assay based on cfg['correlations'].
-    Writes one CSV per assay (caller controls filename).
+    Writes one CSV per assay if out_csv_path is given (caller controls filename).
     Returns the results dataframe.
     """
     c = cfg.get("correlations", {})
@@ -309,7 +313,8 @@ def run_correlations(
         out.loc[sub_idx, "p_adj"] = _adjust_pvalues(pvals, corr_method)
 
     out = out.sort_values(["assay", "spec_name", "grouping", "group_key", "x", "y"]).reset_index(drop=True)
-    Path(out_csv_path).parent.mkdir(parents=True, exist_ok=True)
-    out.to_csv(out_csv_path, index=False)
+    if out_csv_path:
+        Path(out_csv_path).parent.mkdir(parents=True, exist_ok=True)
+        out.to_csv(out_csv_path, index=False)
     return out
 

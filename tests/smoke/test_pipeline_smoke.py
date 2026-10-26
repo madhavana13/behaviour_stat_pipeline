@@ -6,7 +6,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 CONFIG = REPO_ROOT / "configs" / "stats.yaml"
 EXPERIMENT_CONFIG = REPO_ROOT / "configs" / "experiments" / "EXP-2026-002.yaml"
 
-ASSAYS = ["OFT", "NOR", "VIT", "LM", "MISC"]
+ASSAYS = ["OFT1", "OFT2", "OFT3", "OFT4", "NOR", "VIT", "LM", "MISC"]
 
 
 def run(cmd):

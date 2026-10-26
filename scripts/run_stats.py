@@ -3,18 +3,20 @@ from dataclasses import replace
 
 import argparse
 from pathlib import Path
+import sys
 import textwrap
-import yaml
 
 import pandas as pd
 
 from behaviour_stat_pipeline.common.exclusions import (
     load_exclusions,
     apply_exclusions_for_endpoint,
+    exclusions_for_endpoint,
 )
 
 from behaviour_stat_pipeline.stats.common import (
     load_stats_config,
+    load_yaml_strict,
     read_processed,
     read_subjects,
     merge_metadata,
@@ -40,6 +42,9 @@ from behaviour_stat_pipeline.stats.endpoints.posthoc_cellmeans_prism import (
 from behaviour_stat_pipeline.stats.endpoints.correlations import run_correlations
 from behaviour_stat_pipeline.stats.diagnostics import endpoint_diagnostics, rout_diagnostics
 from behaviour_stat_pipeline.stats.corrections import adjust_pvalues
+from behaviour_stat_pipeline.stats.provenance import build_provenance, write_provenance
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 # -------------------------
@@ -50,12 +55,17 @@ def write_text(path: Path, txt: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(txt, encoding="utf-8")
 
+def write_table(df: pd.DataFrame, path: Path, cfg) -> None:
+    """Write an output table stamped with the run_id from {ASSAY}_provenance.json."""
+    df = df.copy()
+    df["run_id"] = cfg.run_id
+    df.to_csv(path, index=False)
+
 def load_yaml(path: str) -> dict:
     if not path:
         return {}
-    with open(path, "r", encoding="utf-8") as f:
-        return yaml.safe_load(f) or {}
-    
+    return load_yaml_strict(path)
+
 def apply_assay_instance_aliases(cfg, exp_cfg: dict):
     """
     Allow assay instances such as OFT1/OFT2 to reuse endpoint/config
@@ -198,7 +208,39 @@ def analysis_df_for_endpoint(
     )
 
     return df_ep, exclusion_summary(applied)
-    
+
+
+def mask_excluded_values(
+    df: pd.DataFrame,
+    exclusions: pd.DataFrame,
+    *,
+    assay: str,
+    columns: list[str],
+    cfg,
+    analysis_scope: str = "primary",
+) -> pd.DataFrame:
+    """
+    Set excluded mice's values to NaN, column by column.
+
+    For analyses that use several endpoints at once (correlations, diagnostics),
+    so that a mouse excluded from one endpoint still contributes to the others.
+    """
+    out = df.copy()
+    for col in dict.fromkeys(columns):
+        if col not in out.columns:
+            continue
+        applied = exclusions_for_endpoint(
+            exclusions,
+            assay=assay.upper(),
+            endpoint=col,
+            analysis_scope=analysis_scope,
+        )
+        if applied.empty:
+            continue
+        excluded_ids = set(applied["mouse_id"].astype(str))
+        out.loc[out[cfg.mouse_id_col].astype(str).isin(excluded_ids), col] = float("nan")
+    return out
+
 # -------------------------
 # Core pipeline stages
 # -------------------------
@@ -291,7 +333,7 @@ def run_primary_tests(df: pd.DataFrame, cfg, assay: str, exclusions: pd.DataFram
 
     out = pd.concat(frames, ignore_index=True)
     out_path = cfg.out_tables / f"{assay.upper()}_primary_one_sample.csv"
-    out.to_csv(out_path, index=False)
+    write_table(out, out_path, cfg)
     log_written(out_path)
 
 def run_anova(df: pd.DataFrame, cfg, assay: str, exclusions: pd.DataFrame) -> pd.DataFrame | None:
@@ -355,7 +397,7 @@ def run_anova(df: pd.DataFrame, cfg, assay: str, exclusions: pd.DataFrame) -> pd
     aov["significance_label"] = aov["p_adj"].apply(_significance_label)
 
     out_path = cfg.out_tables / f"{assay.upper()}_secondary_two_way_anova.csv"
-    aov.to_csv(out_path, index=False)
+    write_table(aov, out_path, cfg)
     log_written(out_path)
 
     return aov
@@ -363,7 +405,7 @@ def run_anova(df: pd.DataFrame, cfg, assay: str, exclusions: pd.DataFrame) -> pd
 
 def run_posthoc(df: pd.DataFrame, cfg, assay: str, exclusions: pd.DataFrame,) -> None:
     posthoc_cfg = getattr(cfg, "secondary_two_way_anova_posthoc", {}) or {}
-    if not posthoc_cfg:
+    if not posthoc_cfg or not posthoc_cfg.get("enabled", True):
         return
 
     endpoints = cfg.secondary_two_way_anova_endpoints.get(assay, [])
@@ -415,11 +457,11 @@ def run_posthoc(df: pd.DataFrame, cfg, assay: str, exclusions: pd.DataFrame,) ->
     df_posthoc = pd.concat(posthoc_frames, ignore_index=True)
 
     out_path = cfg.out_tables / f"{assay.upper()}_secondary_posthoc_cellmeans.csv"
-    df_posthoc.to_csv(out_path, index=False)
+    write_table(df_posthoc, out_path, cfg)
     log_written(out_path)
 
 
-def run_diagnostics(df: pd.DataFrame, cfg, assay: str) -> None:
+def run_diagnostics(df: pd.DataFrame, cfg, assay: str, exclusions: pd.DataFrame) -> None:
     if not getattr(cfg, "diagnostics_enabled", False):
         return
 
@@ -440,6 +482,8 @@ def run_diagnostics(df: pd.DataFrame, cfg, assay: str) -> None:
         print(f"WARNING [{assay.upper()}]: no available diagnostic endpoints; skipping diagnostics.")
         return
 
+    df = mask_excluded_values(df, exclusions, assay=assay, columns=available_endpoints, cfg=cfg)
+
     for grouping in cfg.diagnostics_groupings:
         diag_df, flag_df = endpoint_diagnostics(
             df,
@@ -453,25 +497,25 @@ def run_diagnostics(df: pd.DataFrame, cfg, assay: str) -> None:
         )
 
         suffix = "_".join(grouping)
-        diag_df.to_csv(cfg.out_tables / f"{assay.upper()}_endpoint_diagnostics_by_{suffix}.csv", index=False)
-        flag_df.to_csv(cfg.out_tables / f"{assay.upper()}_flagged_points_madz_by_{suffix}.csv", index=False)
+        write_table(diag_df, cfg.out_tables / f"{assay.upper()}_endpoint_diagnostics_by_{suffix}.csv", cfg)
+        write_table(flag_df, cfg.out_tables / f"{assay.upper()}_flagged_points_madz_by_{suffix}.csv", cfg)
 
         rout_df = rout_diagnostics(
             df,
             assay=assay.upper(),
             endpoints=available_endpoints,
-            group_cols=["group"],
+            group_cols=grouping,
             id_col=cfg.mouse_id_col,
             q=0.01,
             min_n=6,
         )
 
-        rout_df.to_csv(cfg.out_tables / f"{assay.upper()}_flagged_points_rout_by_{suffix}.csv", index=False)
+        write_table(rout_df, cfg.out_tables / f"{assay.upper()}_flagged_points_rout_by_{suffix}.csv", cfg)
         log_written(cfg.out_tables / f"{assay.upper()}_endpoint_diagnostics_by_{suffix}.csv")
         log_written(cfg.out_tables / f"{assay.upper()}_flagged_points_madz_by_{suffix}.csv")
         log_written(cfg.out_tables / f"{assay.upper()}_flagged_points_rout_by_{suffix}.csv")
 
-def run_exploratory(df: pd.DataFrame, cfg, assay: str) -> None:
+def run_exploratory(df: pd.DataFrame, cfg, assay: str, exclusions: pd.DataFrame) -> None:
     if not getattr(cfg, "correlations_enabled", False):
         print(f"WARNING [{assay.upper()}]: correlations disabled; skipping correlations.")
         return
@@ -508,6 +552,13 @@ def run_exploratory(df: pd.DataFrame, cfg, assay: str) -> None:
         )
         return
 
+    default_covariates = list(cfg.correlations_defaults.get("covariates", []) or [])
+    corr_columns = []
+    for spec in matching_specs:
+        corr_columns += [spec.get("x"), spec.get("y")]
+        corr_columns += list(spec.get("covariates", default_covariates) or [])
+    df = mask_excluded_values(df, exclusions, assay=assay, columns=corr_columns, cfg=cfg)
+
     out_path = cfg.out_tables / f"{assay.upper()}_correlations.csv"
 
     # run_correlations expects the original nested YAML-like shape:
@@ -515,10 +566,10 @@ def run_exploratory(df: pd.DataFrame, cfg, assay: str) -> None:
     corr_cfg = {
         "correlations": {
             "enabled": getattr(cfg, "correlations_enabled", False),
-            "defaults": getattr(cfg, "correlations_defaults", {}) or {},
-            "default_groupings": getattr(cfg, "correlations_default_groupings", [[]]) or [[]],
-            "correction": getattr(cfg, "correlations_correction", "fdr_bh"),
-            "min_n": getattr(cfg, "correlations_min_n", 6),
+            "defaults": cfg.correlations_defaults,
+            "default_groupings": cfg.correlations_default_groupings,
+            "correction": cfg.correlations_correction,
+            "min_n": cfg.correlations_min_n,
             "specs": corr_specs,
         }
     }
@@ -527,7 +578,7 @@ def run_exploratory(df: pd.DataFrame, cfg, assay: str) -> None:
         assay=assay,
         df=df,
         cfg=corr_cfg,
-        out_csv_path=str(out_path),
+        out_csv_path=None,
     )
 
     if corr_df.empty:
@@ -538,6 +589,7 @@ def run_exploratory(df: pd.DataFrame, cfg, assay: str) -> None:
         )
         return
 
+    write_table(corr_df, out_path, cfg)
     log_written(out_path)
 
 def write_summary(
@@ -550,7 +602,7 @@ def write_summary(
 
     counts = cell_counts(df, between)
     counts_path = cfg.out_tables / f"{assay.upper()}_cell_counts.csv"
-    counts.to_csv(counts_path, index=False)
+    write_table(counts, counts_path, cfg)
 
     assay_upper = assay.upper()
 
@@ -615,6 +667,11 @@ def main() -> None:
     ap.add_argument("--config", required=True)
     ap.add_argument("--experiment-config", default="", help="Path to experiment YAML config")
     ap.add_argument("--assays", nargs="*", default=None)
+    ap.add_argument(
+        "--require-clean",
+        action="store_true",
+        help="Refuse to run if tracked files have uncommitted changes (use for results you will report)",
+    )
     args = ap.parse_args()
 
     cfg = load_stats_config(args.config)
@@ -658,14 +715,33 @@ def main() -> None:
         assay_cfg.out_logs.mkdir(parents=True, exist_ok=True)
         assay_cfg.out_figures.mkdir(parents=True, exist_ok=True)
 
+        prov = build_provenance(
+            repo_root=REPO_ROOT,
+            files={
+                "stats_config": args.config,
+                "experiment_config": args.experiment_config or None,
+                "subjects": cfg.subjects_path,
+                "exclusions": exclusions_path or None,
+                "processed": assay_cfg.processed_dir / f"{assay_key}_processed.csv",
+            },
+            argv=sys.argv,
+        )
+        if prov["git"]["dirty"]:
+            msg = f"uncommitted changes in tracked files: {prov['git']['dirty_files']}"
+            if args.require_clean:
+                raise SystemExit(f"ERROR: --require-clean set and {msg}")
+            print(f"WARNING [{assay_key}]: {msg}; outputs cannot be traced to a commit.")
+        assay_cfg = replace(assay_cfg, run_id=prov["run_id"])
+        write_provenance(prov, assay_cfg.out_logs / f"{assay_key}_provenance.json")
+
         df = read_processed(assay_cfg.processed_dir, assay)
         df = prepare_analysis_df(df, subjects, assay_cfg, assay)
 
         run_primary_tests(df, assay_cfg, assay,exclusions)
         run_anova(df, assay_cfg, assay, exclusions)
         run_posthoc(df, assay_cfg, assay, exclusions)
-        run_diagnostics(df, assay_cfg, assay)
-        run_exploratory(df, assay_cfg, assay)
+        run_diagnostics(df, assay_cfg, assay, exclusions)
+        run_exploratory(df, assay_cfg, assay, exclusions)
 
         write_summary(df, assay_cfg, assay, exclusions)
 

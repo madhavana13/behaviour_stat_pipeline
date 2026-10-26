@@ -32,6 +32,7 @@ def run_two_way_anova(
     """
     Tidy two-way ANOVA table (Type III by default) for:
         endpoint ~ C(f1) * C(f2)
+    Type III uses sum-to-zero (effect) coding, matching Prism/SPSS/car::Anova.
 
     Robust to arbitrary column names (spaces, punctuation) via patsy Q("...").
     """
@@ -61,14 +62,20 @@ def run_two_way_anova(
     f1q = f'Q("{f1}")'
     f2q = f'Q("{f2}")'
 
+    # Type III SS are only meaningful with sum-to-zero contrasts; the default
+    # Treatment coding tests "simple" effects at the reference level instead.
+    coding = ", Sum" if typ == 3 else ""
+
     if include_interaction:
-        formula = f"{y} ~ C({f1q}) * C({f2q})"
+        formula = f"{y} ~ C({f1q}{coding}) * C({f2q}{coding})"
     else:
-        formula = f"{y} ~ C({f1q}) + C({f2q})"
+        formula = f"{y} ~ C({f1q}{coding}) + C({f2q}{coding})"
 
     # Fit OLS and compute ANOVA
     model = smf.ols(formula, data=d, eval_env=0).fit()
     aov = sm.stats.anova_lm(model, typ=typ).reset_index().rename(columns={"index": "term"})
+    # Keep term labels independent of coding (figures parse them)
+    aov["term"] = aov["term"].str.replace(", Sum)", ")", regex=False)
 
     # Attach metadata
     aov["assay"] = assay

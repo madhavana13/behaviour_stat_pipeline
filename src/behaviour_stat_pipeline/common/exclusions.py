@@ -27,8 +27,9 @@ def load_exclusions(path: str | Path | None) -> pd.DataFrame:
     exclude_from  : 'primary', 'sensitivity', or 'all'
     reason        : non-empty free-text reason
 
-    Returns an empty dataframe with the expected columns if no file is supplied
-    or if the file does not exist.
+    Returns an empty dataframe with the expected columns if no file is supplied.
+    A supplied path that does not exist is an error (a typo must not silently
+    disable all exclusions).
     """
     cols = ["mouse_id", "assay", "endpoint", "exclude_from", "reason"]
 
@@ -37,7 +38,7 @@ def load_exclusions(path: str | Path | None) -> pd.DataFrame:
 
     path = Path(path)
     if not path.exists():
-        return pd.DataFrame(columns=cols)
+        raise FileNotFoundError(f"Exclusion file configured but not found: {path}")
 
     exclusions = pd.read_csv(path)
 
