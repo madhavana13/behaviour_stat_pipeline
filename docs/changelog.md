@@ -142,3 +142,30 @@ Checkpoint – Linear and linear mixed models (optional R/nlme backend)
 - Type III only (Type II needs the `car` package).
 - No residual correlation structures (e.g. AR1) yet; the random intercept implies compound symmetry.
 - No figures for model-based contrasts yet.
+
+2026-10-27 (b)
+Checkpoint – Per-experiment analysis plan; primary vs exploratory endpoints
+
+### Changed
+- Experiment configs now hold the analysis plan (`analysis:`): assays, endpoints (one-sample nulls,
+  diagnostics, ANOVA, time-to-event), linear models, correlation specs and `primary_endpoints`.
+  It is merged over `configs/stats.yaml`, which now holds method defaults only (456 -> 209 lines).
+  Lists in the experiment replace shared ones; mappings merge.
+- EXP-2025-001 and EXP-2026-002 received the settings they previously inherited; all 126 output
+  tables of both experiments are identical before/after (verified), apart from the new column.
+- Running without `--assays` now uses the experiment's `analysis.assays` (EXP-2026-002: OFT1-4 instead of
+  the non-existent OFT/EPM).
+- `run_figures.py` uses the same merged config.
+
+### Added
+- `endpoint_role` (primary/exploratory) in every output table. ANOVA, time-to-event and linear-model
+  corrections across endpoints are computed within role, so primary endpoints form their own family.
+  Correlations are always exploratory. With no `primary_endpoints`, everything is exploratory and
+  p_adj is unchanged.
+- A primary endpoint that is not analysed for its assay/model is a config error (catches typos).
+- `analysis_frozen_at: <commit>`: each run compares the `analysis` block with that commit and records
+  the result in provenance; a change is a warning, or an error with `--require-clean`.
+
+### Not yet moved
+- Ingestion settings in `stats.yaml` (`subjects`, `misc.raw_file` pointing at EXP-2026-002) and figure
+  specs in `figures.yaml` are still shared.

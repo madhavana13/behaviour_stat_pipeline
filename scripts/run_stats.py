@@ -15,6 +15,7 @@ from behaviour_stat_pipeline.common.exclusions import (
 )
 
 from behaviour_stat_pipeline.stats.common import (
+    endpoint_role,
     load_stats_config,
     load_yaml_strict,
     read_processed,
@@ -50,7 +51,7 @@ from behaviour_stat_pipeline.stats.endpoints.linear_models import (
 )
 from behaviour_stat_pipeline.stats.diagnostics import endpoint_diagnostics, rout_diagnostics
 from behaviour_stat_pipeline.stats.corrections import adjust_pvalues
-from behaviour_stat_pipeline.stats.provenance import build_provenance, write_provenance
+from behaviour_stat_pipeline.stats.provenance import build_provenance, frozen_plan_status, write_provenance
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -334,6 +335,7 @@ def run_primary_tests(df: pd.DataFrame, cfg, assay: str, exclusions: pd.DataFram
             res[k] = v
 
         res["analysis_scope"] = "primary"
+        res["endpoint_role"] = endpoint_role(cfg, assay, endpoint)
         frames.append(res)
 
     if not frames:
@@ -391,13 +393,15 @@ def run_anova(df: pd.DataFrame, cfg, assay: str, exclusions: pd.DataFrame) -> pd
             res[k] = v
 
         res["analysis_scope"] = "primary"
+        res["endpoint_role"] = endpoint_role(cfg, assay, ep)
         frames.append(res)
 
     aov = pd.concat(frames, ignore_index=True)
 
+    # Primary and exploratory endpoints are separate correction families
     method = cfg.secondary_two_way_anova_correction
     if method.lower() != "none":
-        aov["p_adj"] = aov.groupby("term")["p_value"].transform(
+        aov["p_adj"] = aov.groupby(["term", "endpoint_role"])["p_value"].transform(
             lambda s: adjust_pvalues(s, method=method)
         )
     else:
@@ -458,6 +462,7 @@ def run_posthoc(df: pd.DataFrame, cfg, assay: str, exclusions: pd.DataFrame,) ->
             res[k] = v
 
         res["analysis_scope"] = "primary"
+        res["endpoint_role"] = endpoint_role(cfg, assay, ep)
         posthoc_frames.append(res)
 
     if not posthoc_frames:
@@ -515,12 +520,15 @@ def run_time_to_event_stage(df: pd.DataFrame, cfg, assay: str, exclusions: pd.Da
         for k, v in excl_info.items():
             tests[k] = v
         tests["analysis_scope"] = "primary"
+        tests["endpoint_role"] = endpoint_role(cfg, assay, ep)
         test_frames.append(tests)
         summary_frames.append(summary)
 
     out = pd.concat(test_frames, ignore_index=True)
     method = cfg.time_to_event_correction
-    out["p_adj"] = out.groupby("term")["p_value"].transform(lambda s: adjust_pvalues(s, method=method))
+    out["p_adj"] = out.groupby(["term", "endpoint_role"])["p_value"].transform(
+        lambda s: adjust_pvalues(s, method=method)
+    )
     out["correction_method"] = method
     out["significance_label"] = out["p_adj"].apply(_significance_label)
 
@@ -542,6 +550,7 @@ def run_linear_models_stage(
     args,
     exclusions_path: str,
     out_root: Path,
+    plan: dict,
 ) -> None:
     """
     Linear / mixed models (R nlme backend). A model can span several assays, so it
@@ -584,6 +593,7 @@ def run_linear_models_stage(
             argv=sys.argv,
         )
         prov["rscript"] = rscript
+        prov["analysis_plan"] = plan
         if prov["git"]["dirty"] and args.require_clean:
             raise SystemExit(f"ERROR: --require-clean set and uncommitted changes: {prov['git']['dirty_files']}")
         model_cfg = replace(cfg, run_id=prov["run_id"])
@@ -605,11 +615,17 @@ def run_linear_models_stage(
             prov["nlme_version"] = str(info["nlme_version"].iloc[0])
         write_provenance(prov, logs_dir / f"{name}_provenance.json")
 
+        for df_out in out.values():
+            if not df_out.empty and "endpoint" in df_out.columns:
+                df_out["endpoint_role"] = df_out["endpoint"].map(lambda e: endpoint_role(cfg, name, e))
+
         aov = out["anova"]
         if not aov.empty:
             aov = aov[aov["term"] != "(Intercept)"].copy()
             method = cfg.linear_models_correction
-            aov["p_adj"] = aov.groupby("term")["p_value"].transform(lambda s: adjust_pvalues(s, method=method))
+            aov["p_adj"] = aov.groupby(["term", "endpoint_role"])["p_value"].transform(
+                lambda s: adjust_pvalues(s, method=method)
+            )
             aov["correction_method"] = method
             aov["significance_label"] = aov["p_adj"].apply(_significance_label)
             out["anova"] = aov
@@ -765,6 +781,7 @@ def run_exploratory(df: pd.DataFrame, cfg, assay: str, exclusions: pd.DataFrame)
         )
         return
 
+    corr_df["endpoint_role"] = "exploratory"  # correlations are never confirmatory here
     write_table(corr_df, out_path, cfg)
     log_written(out_path)
 
@@ -850,8 +867,16 @@ def main() -> None:
     )
     args = ap.parse_args()
 
-    cfg = load_stats_config(args.config)
     exp_cfg = load_yaml(args.experiment_config)
+    cfg = load_stats_config(args.config, exp_cfg)
+
+    plan = frozen_plan_status(REPO_ROOT, args.experiment_config, exp_cfg.get("analysis_frozen_at"))
+    if plan["unchanged"] is False:
+        msg = f"analysis plan changed since it was frozen at {plan['frozen_commit']}: {plan['detail']}"
+        if args.require_clean:
+            raise SystemExit(f"ERROR: --require-clean set and {msg}")
+        print(f"WARNING: {msg}")
+
     exclusions_path = (
         exp_cfg.get("paths", {}).get("metadata_exclusions", "")
         or exp_cfg.get("paths", {}).get("exclusions", "")
@@ -908,6 +933,7 @@ def main() -> None:
             if args.require_clean:
                 raise SystemExit(f"ERROR: --require-clean set and {msg}")
             print(f"WARNING [{assay_key}]: {msg}; outputs cannot be traced to a commit.")
+        prov["analysis_plan"] = plan
         assay_cfg = replace(assay_cfg, run_id=prov["run_id"])
         write_provenance(prov, assay_cfg.out_logs / f"{assay_key}_provenance.json")
 
@@ -927,7 +953,7 @@ def main() -> None:
 
     run_linear_models_stage(
         cfg, subjects, exclusions, assays=assays, args=args, exclusions_path=exclusions_path,
-        out_root=base_out_tables.parent,
+        out_root=base_out_tables.parent, plan=plan,
     )
 
 

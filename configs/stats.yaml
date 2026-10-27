@@ -47,13 +47,8 @@ optional:
   blocking_factors: []         # e.g., [cohort, batch] later
   cluster_col: mouse_id        # repeated measures clustering key
 
-assays:
-  - vit
-  - nor
-  - oft
-  - epm
-  - lm
-  - misc
+# assays, endpoints, models and correlation specs are set per experiment:
+# configs/experiments/<EXP>.yaml -> analysis:. This file holds method defaults.
 
 primary_one_sample:
   enabled: true
@@ -71,14 +66,7 @@ primary_one_sample:
   run_ttest: true
   run_wilcoxon: true
 
-  # null hypotheses per endpoint (default 0 if omitted)
-  nulls:
-    nor:
-      di_explore: 0.0
-      di_iz: 0.0
-    misc:
-      rct_di: 0.0
-    sit: {}   # fill later
+  # null hypotheses per endpoint: experiment config analysis.primary_one_sample.nulls
 
 diagnostics:
   enabled: true
@@ -86,103 +74,7 @@ diagnostics:
     - [group]
     - [group, sex]
   
-  endpoints:
-    nor:
-      - fam_total_explore_time
-      - test_novel_explore_time
-      - test_familiar_iz_time
-      - test_novel_iz_time
-      - di_explore
-      - di_iz
-      - fam_total_distance_moved
-      - test_total_distance_moved
-    oft:
-      - total_distance_moved
-      - time_in_center
-      - distance_moved_in_center
-      - time_in_corners
-      - classifier__supported_rearing_time
-      - classifier__supported_rearing_count
-      - classifier__unsupported_rearing_time
-      - classifier__unsupported_rearing_count
-      - classifier__grooming_time
-      - classifier__grooming_count
-      - classifier__digging_time
-      - classifier__digging_count
-    epm: 
-      - count_head_dips
-      - count_psap
-      - distance_moved_in_center
-      - distance_moved_on_closed_arms
-      - distance_moved_on_open_arms
-      - time_head_dipping
-      - time_in_center
-      - time_on_closed_arms
-      - time_on_open_arms
-      - time_psap
-      - total_distance_moved
-      - total_time_in_arena
-      - transitions_into_center
-      - transitions_into_closed_arms
-      - transitions_into_open_arms
-    vit: 
-      - delta_after_minus_before__hand__time_in_right_lower_quadrant
-      - hand__Before__time_in_right_lower_quadrant
-      - hand__After__time_in_right_lower_quadrant
-      - standing__Before__distance_moved_in_left_lower_quadrant
-      - standing__Before__distance_moved_in_left_upper_quadrant
-      - standing__Before__distance_moved_in_right_lower_quadrant
-      - standing__Before__distance_moved_in_right_upper_quadrant
-
-    lm:
-      - distance_moved_in_central_alley
-      - total_distance_moved
-      - distance_moved_in_narrow_alley
-      - distance_moved_in_protected_alley
-      - latency_to_enter_narrow_alley
-      - latency_to_enter_protected_alley
-      - latency_to_re_enter_narrow_alley
-      - latency_to_re_enter_protected_alley
-      - transitions_into_central_alley
-      - transitions_into_narrow_alley
-      - transitions_into_protected_alley
-      - time_in_central_alley
-      - time_in_narrow_alley
-      - time_in_protected_alley
-
-    misc:
-      - left_adrenal_mg
-      - right_adrenal_mg
-      - adrenal_total_mg
-      - left_adrenal_mg_per_g_bw
-      - right_adrenal_mg_per_g_bw
-      - adrenal_total_mg_per_g_bw
-      - rct_total_intake
-      - rct_pi
-      - rct_di
-      - marbles_buried
-      - immobility_time_s
-      - immobility_fraction
-      - immobility_bouts
-      - immobility_mean_bout_len_s
-      - immobility_latency_s
-
-      - swinging_time_s
-      - swinging_fraction
-      - swinging_bouts
-      - swinging_mean_bout_len_s
-      - swinging_latency_s
-
-      - curling_time_s
-      - curling_fraction
-      - curling_bouts
-      - curling_mean_bout_len_s
-      - curling_latency_s
-
-      - total_mobility_time_s
-      - total_mobility_fraction
-      - total_mobility_bouts
-      - total_mobility_mean_bout_len_s
+  # endpoints: experiment config analysis.diagnostics.endpoints
 
 
 secondary_two_way_anova:
@@ -196,104 +88,7 @@ secondary_two_way_anova:
     group: []                 # empty = infer deterministically
     sex: ["female", "male"]   # lock ordering
 
-  endpoints:
-    nor:
-      - fam_total_explore_time
-      - test_novel_explore_time
-      - test_familiar_iz_time
-      - test_novel_iz_time
-      - di_explore
-      - di_iz
-      - fam_total_distance_moved
-      - test_total_distance_moved
-    oft:
-      - total_distance_moved
-      - time_in_center
-      - distance_moved_in_center
-      - time_in_corners
-      - classifier__supported_rearing_time
-      - classifier__supported_rearing_count
-      - classifier__unsupported_rearing_time
-      - classifier__unsupported_rearing_count
-      - classifier__grooming_time
-      - classifier__grooming_count
-      - classifier__digging_time
-      - classifier__digging_count
-
-
-    epm: 
-      - count_head_dips
-      - count_psap
-      - distance_moved_in_center
-      - distance_moved_on_closed_arms
-      - distance_moved_on_open_arms
-      - time_head_dipping
-      - time_in_center
-      - time_on_closed_arms
-      - time_on_open_arms
-      - time_psap
-      - total_distance_moved
-      - total_time_in_arena
-      - transitions_into_center
-      - transitions_into_closed_arms
-      - transitions_into_open_arms
-    vit: 
-      - delta_after_minus_before__hand__time_in_right_lower_quadrant
-      - hand__Before__time_in_right_lower_quadrant
-      - hand__After__time_in_right_lower_quadrant
-      - standing__Before__distance_moved_in_left_lower_quadrant
-      - standing__Before__distance_moved_in_left_upper_quadrant
-      - standing__Before__distance_moved_in_right_lower_quadrant
-      - standing__Before__distance_moved_in_right_upper_quadrant
-
-    lm:
-      - distance_moved_in_central_alley
-      - total_distance_moved
-      - distance_moved_in_narrow_alley
-      - distance_moved_in_protected_alley
-      # latencies: analysed in time_to_event (censored when the event never happens)
-      - transitions_into_central_alley
-      - transitions_into_narrow_alley
-      - transitions_into_protected_alley
-      - time_in_central_alley
-      - time_in_narrow_alley
-      - time_in_protected_alley
-
-    misc:
-      - left_adrenal_mg
-      - right_adrenal_mg
-      - adrenal_total_mg
-      - left_adrenal_mg_per_g_bw
-      - right_adrenal_mg_per_g_bw
-      - adrenal_total_mg_per_g_bw
-      - rct_total_intake
-      - rct_pi
-      - rct_di
-      - marbles_buried
-      - immobility_time_s
-      - immobility_fraction
-      - immobility_bouts
-      - immobility_mean_bout_len_s
-      - immobility_latency_s
-
-      - swinging_time_s
-      - swinging_fraction
-      - swinging_bouts
-      - swinging_mean_bout_len_s
-      - swinging_latency_s
-
-      - curling_time_s
-      - curling_fraction
-      - curling_bouts
-      - curling_mean_bout_len_s
-      - curling_latency_s
-
-      - total_mobility_time_s
-      - total_mobility_fraction
-      - total_mobility_bouts
-      - total_mobility_mean_bout_len_s
-
-
+  # endpoints: experiment config analysis.secondary_two_way_anova.endpoints
 
   posthoc:
     enabled: true
@@ -323,12 +118,7 @@ time_to_event:
   duration_col: time_in_arena
   correction_across_endpoints: holm
 
-  endpoints:
-    lm:
-      - latency_to_enter_protected_alley
-      - latency_to_re_enter_protected_alley
-      - latency_to_enter_narrow_alley
-      - latency_to_re_enter_narrow_alley
+  # endpoints: experiment config analysis.time_to_event.endpoints
 
 # Linear and linear mixed models (optional R backend: nlme, ships with R).
 #   fixed:       right-hand side; factors from design.between_factors / optional.blocking_factors,
@@ -345,23 +135,7 @@ linear_models:
   correction_across_endpoints: holm   # per term, across the model's endpoints
   contrast_correction: holm           # within endpoint, across the levels of `by`
 
-  models:
-    - name: oft_post_sessions
-      assays: [oft2, oft3, oft4]
-      stack_as: session
-      baseline: oft1
-      endpoints:
-        - total_distance_moved
-        - time_in_center
-      fixed: "group * sex * session + baseline"
-      random: "~ 1 | mouse_id"
-      variance_by: [group]
-      # log | log1p | sqrt | logit; applied to the endpoint and its baseline.
-      # Estimates/contrasts are then on that scale (log: differences = log ratios).
-      transforms:
-        time_in_center: log
-      contrasts:
-        - {factor: group, by: [session]}
+  # models: experiment config analysis.linear_models.models
 
 correlations:
   enabled: true
@@ -387,28 +161,8 @@ correlations:
 
   min_n: 8                  # minimum N per group to run correlation
 
-  # minimal per-spec definitions
-  specs:
-    - assay: nor
-      x: "test_total_distance_moved"
-      y: "test_novel_explore_time"
+  # specs: experiment config analysis.correlations.specs
 
-    - assay: nor
-      x: "di_explore"
-      y: "test_total_explore_time"
-
-    - assay: oft
-      x: "total_distance_moved"
-      y: "time_in_center"
-
-    - assay: lm
-      x: "latency_to_enter_narrow_alley" 
-      y: "time_in_narrow_alley" 
-
-      method: pearson        # optional override
-      groupings:
-        - []                 # optional override (pooled only)
-        
 
 misc:
   raw_file: data/experiments/EXP-2026-002/metadata/misc_raw.csv

@@ -87,6 +87,38 @@ def build_provenance(*, repo_root: str | Path, files: dict[str, str | Path | Non
     return prov
 
 
+def frozen_plan_status(repo_root: str | Path, experiment_config: str | Path | None, commit: str | None) -> dict:
+    """
+    Compare the experiment's `analysis:` block with the version committed at `commit`
+    (experiment key `analysis_frozen_at`). Lets a run show that the analysis was fixed
+    before the results were seen.
+
+    Returns {"frozen_commit", "unchanged": True/False/None (no freeze), "detail"}.
+    """
+    import yaml
+
+    if not commit:
+        return {"frozen_commit": None, "unchanged": None, "detail": "no analysis_frozen_at set"}
+    repo_root = Path(repo_root).resolve()
+    exp_path = Path(experiment_config).resolve()
+    try:
+        rel = exp_path.relative_to(repo_root).as_posix()
+    except ValueError:
+        return {"frozen_commit": commit, "unchanged": False,
+                "detail": f"experiment config {exp_path} is outside the repository; cannot check"}
+    frozen_text = _git(repo_root, "show", f"{commit}:{rel}")
+    if frozen_text is None:
+        return {"frozen_commit": commit, "unchanged": False,
+                "detail": f"{rel} not found at commit {commit}"}
+    frozen = (yaml.safe_load(frozen_text) or {}).get("analysis")
+    current = (yaml.safe_load(exp_path.read_text(encoding="utf-8")) or {}).get("analysis")
+    if frozen == current:
+        return {"frozen_commit": commit, "unchanged": True, "detail": "analysis block identical"}
+    changed = sorted(k for k in set(frozen or {}) | set(current or {})
+                     if (frozen or {}).get(k) != (current or {}).get(k))
+    return {"frozen_commit": commit, "unchanged": False, "detail": f"changed sections: {changed}"}
+
+
 def write_provenance(prov: dict, path: str | Path) -> None:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)

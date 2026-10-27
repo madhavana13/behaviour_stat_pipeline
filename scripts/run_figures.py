@@ -8,6 +8,7 @@ import yaml
 
 from behaviour_stat_pipeline.figures.runner import run_figures_from_config
 from behaviour_stat_pipeline.common.exclusions import load_exclusions
+from behaviour_stat_pipeline.stats.common import resolve_config
 
 
 def load_yaml(path: str | Path) -> dict[str, Any]:
@@ -115,7 +116,9 @@ def main() -> None:
     args = ap.parse_args()
 
     stats_config_path = Path(args.config)
-    stats_cfg = load_yaml(stats_config_path)
+    exp_cfg = load_yaml(args.experiment_config)
+    # Same merged config as run_stats: the experiment's analysis block over stats.yaml
+    stats_cfg = resolve_config(load_yaml(stats_config_path), exp_cfg)
 
     figures_config_path = resolve_figures_config_path(
         stats_config_path=stats_config_path,
@@ -128,7 +131,6 @@ def main() -> None:
         figures_cfg=figures_cfg,
     )
 
-    exp_cfg = load_yaml(args.experiment_config)
     exp_paths = exp_cfg.get("paths", {}) or {}
 
     exclusions_path = (

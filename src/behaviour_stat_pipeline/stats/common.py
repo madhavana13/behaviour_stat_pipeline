@@ -64,6 +64,66 @@ _ALLOWED_KEYS = {
 _MULTITEST_METHODS = {"none", "bonferroni", "holm", "sidak", "fdr_bh", "fdr_by"}
 
 
+# Sections an experiment's `analysis:` block may set. stats.yaml holds method
+# defaults; the experiment decides what is analysed and what is primary.
+_ANALYSIS_KEYS = {
+    "assays", "design", "primary_endpoints", "primary_one_sample", "diagnostics",
+    "secondary_two_way_anova", "time_to_event", "linear_models", "correlations",
+}
+
+
+def _deep_merge(base: dict, override: dict) -> dict:
+    """Mappings merge recursively; lists and scalars in `override` replace those in `base`."""
+    out = dict(base)
+    for k, v in override.items():
+        out[k] = _deep_merge(out[k], v) if isinstance(v, dict) and isinstance(out.get(k), dict) else v
+    return out
+
+
+def resolve_config(stats_cfg: dict, exp_cfg: Optional[dict]) -> dict:
+    """
+    Merge an experiment's `analysis:` block over the shared stats config.
+    Endpoint lists, model lists and specs in the experiment replace the shared ones.
+    """
+    analysis = (exp_cfg or {}).get("analysis", {}) or {}
+    unknown = sorted(set(analysis) - _ANALYSIS_KEYS)
+    if unknown:
+        raise ConfigError(f"experiment analysis: unknown keys {unknown}; allowed: {sorted(_ANALYSIS_KEYS)}")
+    return _deep_merge(stats_cfg, analysis)
+
+
+def analysis_endpoints(cfg: dict, key: str, instance_types: dict[str, str]) -> set[str]:
+    """All endpoints analysed for an assay instance (incl. its assay type's lists) or a model name."""
+    keys = {key.lower(), instance_types.get(key.lower(), key.lower())}
+    out: set[str] = set()
+    for section, field_name in [("primary_one_sample", "nulls"), ("secondary_two_way_anova", "endpoints"),
+                                ("time_to_event", "endpoints")]:
+        by_assay = (cfg.get(section, {}) or {}).get(field_name, {}) or {}
+        for k in keys:
+            out |= set(by_assay.get(k, {}) or {})
+    for spec in (cfg.get("linear_models", {}) or {}).get("models", []) or []:
+        if isinstance(spec, dict) and str(spec.get("name", "")).lower() == key.lower():
+            out |= set(spec.get("endpoints", []) or [])
+    return out
+
+
+def validate_primary_endpoints(cfg: dict, instance_types: dict[str, str]) -> list[str]:
+    """Every declared primary endpoint must be analysed somewhere (catches typos)."""
+    errors = []
+    primary = cfg.get("primary_endpoints", {}) or {}
+    if not isinstance(primary, dict):
+        return ["primary_endpoints: expected a mapping of assay instance or model name -> endpoint list"]
+    for key, eps in primary.items():
+        analysed = analysis_endpoints(cfg, str(key), instance_types)
+        missing = sorted(set(eps or []) - analysed)
+        if missing:
+            errors.append(
+                f"primary_endpoints.{key}: {missing} are not analysed for '{key}' "
+                f"(not in primary_one_sample.nulls, secondary_two_way_anova/time_to_event endpoints or a model named '{key}')"
+            )
+    return errors
+
+
 def validate_stats_config(cfg: dict) -> None:
     """
     Check the stats sections for unknown keys, unsupported methods and duplicated endpoints.
@@ -220,6 +280,10 @@ class StatsConfig:
     linear_models_models: list[dict] = field(default_factory=list)
     # From the experiment config: assay instance (lower case) -> nominal trial length in s
     trial_durations_s: dict[str, float] = field(default_factory=dict)
+    # assay instance or model name (lower case) -> primary endpoints; everything else is exploratory
+    primary_endpoints: dict[str, list[str]] = field(default_factory=dict)
+    # assay instance (lower case) -> assay type (lower case), e.g. oft2 -> oft
+    instance_types: dict[str, str] = field(default_factory=dict)
     # Set per run from provenance; stamped onto every output table
     run_id: str = ""
 
@@ -234,10 +298,21 @@ class StatsConfig:
         """
         return asdict(self)
 
-def load_stats_config(path: str | Path) -> StatsConfig:
+def load_stats_config(path: str | Path, experiment_config: Optional[dict] = None) -> StatsConfig:
+    """
+    Load stats.yaml, merge the experiment's `analysis:` block over it (if given), and validate
+    the result. The merged config is what every stage sees.
+    """
     path = Path(path)
-    cfg = load_yaml_strict(path)
+    instance_types = {
+        str(name).lower(): str((inst or {}).get("assay_type", name)).lower()
+        for name, inst in ((experiment_config or {}).get("assay_instances", {}) or {}).items()
+    }
+    cfg = resolve_config(load_yaml_strict(path), experiment_config)
     validate_stats_config(cfg)
+    plan_errors = validate_primary_endpoints(cfg, instance_types)
+    if plan_errors:
+        raise ConfigError("Invalid analysis plan:\n  - " + "\n  - ".join(plan_errors))
 
     mouse_id_col = cfg["id_cols"]["mouse"]
     paths = cfg["paths"]
@@ -350,7 +425,21 @@ def load_stats_config(path: str | Path) -> StatsConfig:
         linear_models_correction=str(lm_cfg.get("correction_across_endpoints", "holm")),
         linear_models_contrast_correction=str(lm_cfg.get("contrast_correction", "holm")),
         linear_models_models=list(lm_cfg.get("models", []) or []),
+        primary_endpoints={
+            str(k).lower(): list(v or []) for k, v in (cfg.get("primary_endpoints", {}) or {}).items()
+        },
+        instance_types=instance_types,
     )
+
+
+def endpoint_role(cfg: StatsConfig, key: str, endpoint: str) -> str:
+    """'primary' if declared in the experiment's primary_endpoints (by instance, assay type or model), else 'exploratory'."""
+    k = key.lower()
+    keys = {k, cfg.instance_types.get(k, k)}
+    for kk in keys:
+        if endpoint in cfg.primary_endpoints.get(kk, []):
+            return "primary"
+    return "exploratory"
 
 
 def read_processed(processed_dir: Path, assay: str) -> pd.DataFrame:

@@ -25,3 +25,140 @@ assay_patterns:
   epm: "*_output_summary.csv"
   lm: "*_output_summary.csv"
   nor: "*_output_summary.csv"
+
+# ---------------------------------------------------------------------------
+# Analysis plan for this experiment. Merged over configs/stats.yaml, which holds
+# method defaults only; lists here (endpoints, models, specs) replace the shared ones.
+#
+# primary_endpoints: per assay instance/type or linear-model name, the endpoints
+#   that test the experiment's hypotheses. Everything else is reported as
+#   exploratory. Primary and exploratory endpoints are corrected as separate
+#   families (column endpoint_role in every output table).
+#
+# To show the plan was fixed before analysis: commit this file, then set
+#   analysis_frozen_at: <commit sha>
+# at the top level (outside `analysis`). Every run then checks that this block
+# is unchanged since that commit; with --require-clean a change is an error.
+# ---------------------------------------------------------------------------
+
+analysis:
+  assays:
+    - vit
+    - nor
+    - oft
+    - epm
+  primary_endpoints: {}
+  primary_one_sample:
+    nulls:
+      nor:
+        di_explore: 0.0
+        di_iz: 0.0
+  diagnostics:
+    endpoints:
+      nor:
+        - fam_total_explore_time
+        - test_novel_explore_time
+        - test_familiar_iz_time
+        - test_novel_iz_time
+        - di_explore
+        - di_iz
+        - fam_total_distance_moved
+        - test_total_distance_moved
+      oft:
+        - total_distance_moved
+        - time_in_center
+        - distance_moved_in_center
+        - time_in_corners
+        - classifier__supported_rearing_time
+        - classifier__supported_rearing_count
+        - classifier__unsupported_rearing_time
+        - classifier__unsupported_rearing_count
+        - classifier__grooming_time
+        - classifier__grooming_count
+        - classifier__digging_time
+        - classifier__digging_count
+      epm:
+        - count_head_dips
+        - count_psap
+        - distance_moved_in_center
+        - distance_moved_on_closed_arms
+        - distance_moved_on_open_arms
+        - time_head_dipping
+        - time_in_center
+        - time_on_closed_arms
+        - time_on_open_arms
+        - time_psap
+        - total_distance_moved
+        - total_time_in_arena
+        - transitions_into_center
+        - transitions_into_closed_arms
+        - transitions_into_open_arms
+      vit:
+        - delta_after_minus_before__hand__time_in_right_lower_quadrant
+        - hand__Before__time_in_right_lower_quadrant
+        - hand__After__time_in_right_lower_quadrant
+        - standing__Before__distance_moved_in_left_lower_quadrant
+        - standing__Before__distance_moved_in_left_upper_quadrant
+        - standing__Before__distance_moved_in_right_lower_quadrant
+        - standing__Before__distance_moved_in_right_upper_quadrant
+  secondary_two_way_anova:
+    endpoints:
+      nor:
+        - fam_total_explore_time
+        - test_novel_explore_time
+        - test_familiar_iz_time
+        - test_novel_iz_time
+        - di_explore
+        - di_iz
+        - fam_total_distance_moved
+        - test_total_distance_moved
+      oft:
+        - total_distance_moved
+        - time_in_center
+        - distance_moved_in_center
+        - time_in_corners
+        - classifier__supported_rearing_time
+        - classifier__supported_rearing_count
+        - classifier__unsupported_rearing_time
+        - classifier__unsupported_rearing_count
+        - classifier__grooming_time
+        - classifier__grooming_count
+        - classifier__digging_time
+        - classifier__digging_count
+      epm:
+        - count_head_dips
+        - count_psap
+        - distance_moved_in_center
+        - distance_moved_on_closed_arms
+        - distance_moved_on_open_arms
+        - time_head_dipping
+        - time_in_center
+        - time_on_closed_arms
+        - time_on_open_arms
+        - time_psap
+        - total_distance_moved
+        - total_time_in_arena
+        - transitions_into_center
+        - transitions_into_closed_arms
+        - transitions_into_open_arms
+      vit:
+        - delta_after_minus_before__hand__time_in_right_lower_quadrant
+        - hand__Before__time_in_right_lower_quadrant
+        - hand__After__time_in_right_lower_quadrant
+        - standing__Before__distance_moved_in_left_lower_quadrant
+        - standing__Before__distance_moved_in_left_upper_quadrant
+        - standing__Before__distance_moved_in_right_lower_quadrant
+        - standing__Before__distance_moved_in_right_upper_quadrant
+  linear_models:
+    models: []
+  correlations:
+    specs:
+      - assay: nor
+        x: test_total_distance_moved
+        y: test_novel_explore_time
+      - assay: nor
+        x: di_explore
+        y: test_total_explore_time
+      - assay: oft
+        x: total_distance_moved
+        y: time_in_center

@@ -113,13 +113,34 @@ outputs/figures/
 
 ## Typical usage
 
-Run all configured assays:
-```bash
-python scripts/run_stats.py --config configs/stats.yaml
-python scripts/run_figures.py --config configs/stats.yaml
+Each experiment has its own config (`configs/experiments/<EXP>.yaml`) holding its paths
+and its **analysis plan** (`analysis:` block): assays, endpoints, models, correlation specs
+and `primary_endpoints`. `configs/stats.yaml` holds method defaults shared by all
+experiments; the experiment's plan is merged over it.
 
-Run a specific assay:
-python scripts/run_stats.py --config configs/stats.yaml --assays vit
+Run all assays in the experiment's plan:
+```bash
+python scripts/run_stats.py --config configs/stats.yaml --experiment-config configs/experiments/EXP-2026-002.yaml
+python scripts/run_figures.py --config configs/stats.yaml --experiment-config configs/experiments/EXP-2026-002.yaml --assays nor lm
+```
+
+Run specific assays:
+```bash
+python scripts/run_stats.py --config configs/stats.yaml --experiment-config configs/experiments/EXP-2026-002.yaml --assays nor lm
+```
+
+For results you will report, add `--require-clean`: the run refuses uncommitted changes
+and a changed frozen analysis plan, so every table traces to a commit (`run_id` column ->
+`{ASSAY}_provenance.json`).
+
+### Primary vs exploratory endpoints
+
+Declare the endpoints that test the experiment's hypotheses in
+`analysis.primary_endpoints` (by assay instance, assay type or linear-model name).
+Every output table has an `endpoint_role` column; primary and exploratory endpoints
+are corrected for multiple comparisons as separate families. To show the plan was fixed
+before the analysis, commit it and set `analysis_frozen_at: <commit sha>` in the
+experiment config; each run records whether the plan is unchanged since then.
 
 What this pipeline is (and is not)
 
