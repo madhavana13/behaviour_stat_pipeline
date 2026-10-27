@@ -284,6 +284,10 @@ class StatsConfig:
     primary_endpoints: dict[str, list[str]] = field(default_factory=dict)
     # assay instance (lower case) -> assay type (lower case), e.g. oft2 -> oft
     instance_types: dict[str, str] = field(default_factory=dict)
+    # From the experiment config: position of each assay instance in the test battery
+    # (assay_instances.<NAME>.order) and optional day (assay_instances.<NAME>.day)
+    instance_order: dict[str, int] = field(default_factory=dict)
+    instance_day: dict[str, float] = field(default_factory=dict)
     # Set per run from provenance; stamped onto every output table
     run_id: str = ""
 
@@ -308,6 +312,9 @@ def load_stats_config(path: str | Path, experiment_config: Optional[dict] = None
         str(name).lower(): str((inst or {}).get("assay_type", name)).lower()
         for name, inst in ((experiment_config or {}).get("assay_instances", {}) or {}).items()
     }
+    instance_order, instance_day, timeline_errors = read_timeline(experiment_config)
+    if timeline_errors:
+        raise ConfigError("Invalid assay_instances in experiment config:\n  - " + "\n  - ".join(timeline_errors))
     cfg = resolve_config(load_yaml_strict(path), experiment_config)
     validate_stats_config(cfg)
     plan_errors = validate_primary_endpoints(cfg, instance_types)
@@ -429,7 +436,62 @@ def load_stats_config(path: str | Path, experiment_config: Optional[dict] = None
             str(k).lower(): list(v or []) for k, v in (cfg.get("primary_endpoints", {}) or {}).items()
         },
         instance_types=instance_types,
+        instance_order=instance_order,
+        instance_day=instance_day,
     )
+
+
+def read_timeline(experiment_config: Optional[dict]) -> tuple[dict[str, int], dict[str, float], list[str]]:
+    """
+    assay_instances.<NAME>.order (integer position in the test battery) and .day (number,
+    e.g. days relative to manipulation onset). Both optional here; analyses that need them
+    (stacked sessions, baselines) check for them. Unset (null) values are skipped.
+    """
+    order: dict[str, int] = {}
+    day: dict[str, float] = {}
+    errors: list[str] = []
+    for name, inst in ((experiment_config or {}).get("assay_instances", {}) or {}).items():
+        inst = inst or {}
+        o, dd = inst.get("order"), inst.get("day")
+        if o is not None:
+            if isinstance(o, bool) or not isinstance(o, int):
+                errors.append(f"{name}.order must be an integer position in the test battery, got {o!r}")
+            else:
+                order[str(name).lower()] = o
+        if dd is not None:
+            if isinstance(dd, bool) or not isinstance(dd, (int, float)):
+                errors.append(f"{name}.day must be a number, got {dd!r}")
+            else:
+                day[str(name).lower()] = float(dd)
+    seen: dict[int, str] = {}
+    for name, o in order.items():
+        if o in seen:
+            errors.append(f"{seen[o].upper()} and {name.upper()} have the same order {o}")
+        seen[o] = name
+    return order, day, errors
+
+
+def ordered_instances(cfg: StatsConfig, instances: list[str], *, baseline: Optional[str] = None, what: str) -> list[str]:
+    """
+    Sort assay instances by their declared battery order (never by name).
+    Raises ConfigError naming the fields to fill if any order is missing, or if the
+    baseline does not come before every stacked instance.
+    """
+    names = [str(a).lower() for a in instances]
+    needed = names + ([str(baseline).lower()] if baseline else [])
+    missing = [n.upper() for n in needed if n not in cfg.instance_order]
+    if missing:
+        raise ConfigError(
+            f"{what}: the order of the tests is not declared. Set assay_instances.<NAME>.order in the "
+            f"experiment config for {missing} (integer position in the test battery)."
+        )
+    ordered = sorted(names, key=lambda n: cfg.instance_order[n])
+    if baseline and cfg.instance_order[str(baseline).lower()] >= cfg.instance_order[ordered[0]]:
+        raise ConfigError(
+            f"{what}: baseline {str(baseline).upper()} (order {cfg.instance_order[str(baseline).lower()]}) "
+            f"does not come before {ordered[0].upper()} (order {cfg.instance_order[ordered[0]]})."
+        )
+    return ordered
 
 
 def endpoint_role(cfg: StatsConfig, key: str, endpoint: str) -> str:

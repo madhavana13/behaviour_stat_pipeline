@@ -113,6 +113,10 @@ outputs/figures/
 
 ## Typical usage
 
+**Full walkthrough: [docs/pipeline_guide.md](docs/pipeline_guide.md)** (data flow, configs,
+every analysis and its outputs, reproducibility, troubleshooting).
+Quick commands: `scripts/cheatsheet.txt`.
+
 Each experiment has its own config (`configs/experiments/<EXP>.yaml`) holding its paths
 and its **analysis plan** (`analysis:` block): assays, endpoints, models, correlation specs
 and `primary_endpoints`. `configs/stats.yaml` holds method defaults shared by all

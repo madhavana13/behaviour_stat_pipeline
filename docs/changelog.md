@@ -169,3 +169,20 @@ Checkpoint – Per-experiment analysis plan; primary vs exploratory endpoints
 ### Not yet moved
 - Ingestion settings in `stats.yaml` (`subjects`, `misc.raw_file` pointing at EXP-2026-002) and figure
   specs in `figures.yaml` are still shared.
+
+2026-10-27 (c)
+Checkpoint – Declared test order; pipeline guide
+
+### Added
+- `assay_instances.<NAME>.order` (position in the test battery) and optional `.day` in the experiment
+  config. Stacked sessions in linear models follow `order`, never instance names; a baseline must
+  come before the sessions it adjusts. Missing order stops only the affected model, with a message
+  naming the fields to set; the run then exits non-zero after writing all other outputs.
+  Session order is recorded in the model's provenance.
+- `day` as a numeric time variable in stacked models (e.g. `fixed: "group * day"`).
+- Order values must be unique integers; days numbers (config errors otherwise).
+- `docs/pipeline_guide.md`: end-to-end guide; `scripts/cheatsheet.txt` reorganised by workflow step.
+
+### Action needed
+- EXP-2026-002: fill `order` (and optionally `day`) for every assay instance. Until then
+  `oft_post_sessions` is not fitted.

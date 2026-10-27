@@ -1,75 +1,123 @@
+BEHAVIOUR STAT PIPELINE - CHEATSHEET  (PowerShell, run from the repo root)
+Full explanation of every step: docs/pipeline_guide.md
+
+=====================================================================
+0. SET THE EXPERIMENT ONCE PER TERMINAL
+=====================================================================
+
+$exp = "configs/experiments/EXP-2026-002.yaml"
+$cfg = "configs/stats.yaml"
+
+(All commands below use $exp and $cfg. For another experiment, change $exp.)
 
 
-from experiment.yaml:
+=====================================================================
+1. INGEST: raw tracking files -> data/experiments/<EXP>/processed/<ASSAY>_processed.csv
+=====================================================================
 
-python scripts/run_assay.py --assay vit --config configs/stats.yaml --experiment-config configs/experiments/EXP-2026-002.yaml
-python scripts/run_assay.py --assay nor --config configs/stats.yaml --experiment-config configs/experiments/EXP-2026-002.yaml
-python scripts/run_assay.py --assay lm --config configs/stats.yaml --experiment-config configs/experiments/EXP-2026-002.yaml
-python scripts/run_assay.py --assay oft1 --config configs/stats.yaml --experiment-config configs/experiments/EXP-2026-002.yaml
-python scripts/run_assay.py --assay epm --config configs/stats.yaml --experiment-config configs/experiments/EXP-2026-002.yaml
-python scripts/run_assay.py --assay misc --config configs/stats.yaml --experiment-config configs/experiments/EXP-2026-002.yaml
-
-
-
-
-python scripts/run_stats.py --config configs/stats.yaml --experiment-config configs/experiments/EXP-2026-002.yaml --assays nor   
-python scripts/run_stats.py --config configs/stats.yaml --experiment-config configs/experiments/EXP-2026-002.yaml --assays oft
-python scripts/run_stats.py --config configs/stats.yaml --experiment-config configs/experiments/EXP-2026-002.yaml --assays epm
-python scripts/run_stats.py --config configs/stats.yaml --experiment-config configs/experiments/EXP-2026-002.yaml --assays vit
+python scripts/run_assay.py --assay vit  --config $cfg --experiment-config $exp
+python scripts/run_assay.py --assay nor  --config $cfg --experiment-config $exp
+python scripts/run_assay.py --assay lm   --config $cfg --experiment-config $exp
+python scripts/run_assay.py --assay oft1 --config $cfg --experiment-config $exp
+python scripts/run_assay.py --assay oft2 --config $cfg --experiment-config $exp
+python scripts/run_assay.py --assay oft3 --config $cfg --experiment-config $exp
+python scripts/run_assay.py --assay oft4 --config $cfg --experiment-config $exp
+python scripts/run_assay.py --assay misc --config $cfg --experiment-config $exp
+(EXP-2025-001 also has: --assay epm, --assay oft)
 
 
-python scripts/run_figures.py --config configs/stats.yaml --experiment-config configs/experiments/EXP-2026-002.yaml --assays oft2
-python scripts/run_figures.py --config configs/stats.yaml --figures-config configs/figures.yaml --experiment-config configs/experiments/EXP-2026-002.yaml --assays oft2
+=====================================================================
+2. STATS: processed data -> outputs/<EXP>/<ASSAY>/tables/
+=====================================================================
 
-Run heteroscedasity tests:
+All assays in the experiment's plan (analysis.assays in $exp), incl. linear/mixed models:
+    python scripts/run_stats.py --config $cfg --experiment-config $exp
 
-python scripts/combine_processed_and_check_heteroscedasticity.py --experiment-config configs/experiments/EXP-2026-002.yaml
+Selected assays only:
+    python scripts/run_stats.py --config $cfg --experiment-config $exp --assays nor lm
 
-Run NOR individual trajectory
+Mixed models that stack sessions (OFT2-4 with OFT1 baseline) only run when all
+their assays are in the same run:
+    python scripts/run_stats.py --config $cfg --experiment-config $exp --assays oft1 oft2 oft3 oft4
 
-python scripts/nor_check_individual_change.py --experiment-config configs/experiments/EXP-2026-002.yaml
-python scripts/nor_check_individual_change.py --experiment-config configs/experiments/EXP-2026-002.yaml
-
-
-To create new files/folders:
-
-            New-Item -ItemType Directory -Path src\behaviour_stat_pipeline\figures -Force | Out-Null
-            New-Item -ItemType File -Path src/behaviour_stat_pipeline/common/exclusions.py
-            New-Item -ItemType Directory -Path scripts/derive_vit_processed.py
+FOR RESULTS YOU WILL REPORT: commit first, then add --require-clean
+(refuses uncommitted changes and a changed frozen plan; every table then traces to a commit):
+    python scripts/run_stats.py --config $cfg --experiment-config $exp --require-clean
 
 
-For running all assays together:
+=====================================================================
+3. FIGURES: -> outputs/<EXP>/<ASSAY>/figures/   (run stats first: figures read the tables)
+=====================================================================
 
-        python scripts/run_stats.py --config configs/stats.yaml
-        python scripts/run_figures.py --config configs/stats.yaml
+python scripts/run_figures.py --config $cfg --experiment-config $exp --assays nor lm oft1 oft2 oft3 oft4 vit misc
+python scripts/run_figures.py --config $cfg --figures-config configs/figures.yaml --experiment-config $exp --assays oft2
 
-To delete outputs (locally too):
 
-        del .\outputs\figures\LM_*.png
+=====================================================================
+4. EXTRA ANALYSES / CHECKS
+=====================================================================
 
-TO find a string/function across files
+Heteroscedasticity across all processed files:
+    python scripts/combine_processed_and_check_heteroscedasticity.py --experiment-config $exp
 
-        Get-ChildItem -Recurse -Filter *.py | Select-String "group_gap"
+NOR individual trajectories:
+    python scripts/nor_check_individual_change.py --experiment-config $exp
 
-Stop tracking files that were already added (important) .gitignore does not retroactively untrack files that Git already knows about. You must remove them from the index without deleting them locally.
 
-        git rm -r --cached outputs
-        git rm -r --cached data/processed
+=====================================================================
+5. WHERE THINGS LIVE
+=====================================================================
 
-prints all column names from all processed CSVs (header only, no full reads):
+configs/stats.yaml                 method defaults (corrections, ANOVA type, thresholds) - shared
+configs/experiments/<EXP>.yaml     paths, assay instances (order, day, trial_duration_s), exclusions file,
+                                   and the ANALYSIS PLAN (analysis: endpoints, models, primary_endpoints)
+configs/figures.yaml               figure styling and manual figure specs
+configs/labels.csv                 axis labels / titles per endpoint
+data/experiments/<EXP>/metadata/   subjects.csv, exclusions.csv
+outputs/<EXP>/<ASSAY>/tables/      result tables (every table has run_id and endpoint_role)
+outputs/<EXP>/<ASSAY>/logs/        <ASSAY>_provenance.json (commit, input hashes, versions), summaries
+outputs/<EXP>/MODELS/              linear / mixed model results
+docs/changelog.md                  every change that affects results
 
-Get-ChildItem data\processed\LM_processed.csv | ForEach-Object { Import-Csv $_ | Get-Member -MemberType NoteProperty | Select-Object -ExpandProperty Name } | Sort-Object -Unique
 
-Get-ChildItem data\processed\EPM_processed.csv | ForEach-Object { Import-Csv $_ | Get-Member -MemberType NoteProperty | Select-Object -ExpandProperty Name } | Sort-Object -Unique
-Get-ChildItem data\processed\NOR_processed.csv | ForEach-Object { Import-Csv $_ | Get-Member -MemberType NoteProperty | Select-Object -ExpandProperty Name } | Sort-Object -Unique
-Get-ChildItem data\processed\OFT_processed.csv | ForEach-Object { Import-Csv $_ | Get-Member -MemberType NoteProperty | Select-Object -ExpandProperty Name } | Sort-Object -Unique
-Get-ChildItem data\experiments\EXP-2026-002\raw\nor\27a_FAM_output_summary.csv | ForEach-Object { Import-Csv $_ | Get-Member -MemberType NoteProperty | Select-Object -ExpandProperty Name } | Sort-Object -Unique
+=====================================================================
+6. ANALYSIS PLAN (in $exp, under analysis:)
+=====================================================================
 
-"C:\Users\Anjana\Projects\behaviour_stat_pipeline\data\experiments\EXP-2026-002\raw\nor\27a_FAM_output_summary.csv"
+Declare primary endpoints (everything else = exploratory, corrected separately):
+    analysis:
+      primary_endpoints:
+        nor: [di_explore]
+        oft_post_sessions: [total_distance_moved]     # linear model name
 
-For creating directories for a new experiment:
+Order of tests (needed for stacked sessions / baselines; never inferred from names):
+    assay_instances:
+      OFT1: {order: 1, day: -3}    # day optional, e.g. days relative to IFS onset
 
-change experiment name
+Freeze the plan before analysing:
+    git add $exp ; git commit -m "Freeze analysis plan EXP-2026-002"
+    git rev-parse HEAD                 -> copy the sha
+    add to $exp (top level):  analysis_frozen_at: <sha>
+
+
+=====================================================================
+7. TESTS
+=====================================================================
+
+All tests (R-dependent ones are skipped if R is not installed):
+    python -m pytest
+
+Only the statistics validated against R:
+    python -m pytest tests/reference
+
+Regenerate the R reference values (only if the fixture or the R script changed):
+    python tests/reference/generate_fixture.py
+    & "C:\Program Files\R\R-4.5.0\bin\Rscript.exe" tests/reference/generate_reference.R
+
+
+=====================================================================
+8. NEW EXPERIMENT: create folders (change the experiment name)
+=====================================================================
 
 mkdir data\experiments\EXP-2026-002\metadata
 mkdir data\experiments\EXP-2026-002\raw
@@ -86,12 +134,41 @@ mkdir outputs\EXP-2026-002\tables
 mkdir outputs\EXP-2026-002\figures
 mkdir outputs\EXP-2026-002\logs
 
-review folder and ZIP
-powershell -ExecutionPolicy Bypass -File .\scripts\update_review_bundle.ps1 -experiment EXP-2026-002
-For a stable 4-ID sample:
-python scripts/update_tiny_test_data.py --experiment EXP-2026-002 --n 4 --seed 42 --fresh
+Then copy an existing configs/experiments/<EXP>.yaml and edit paths, assay_instances and analysis.
 
-For a fresh random sample:
-python scripts/update_tiny_test_data.py --experiment EXP-2026-002 --n 4 --seed %RANDOM% --fresh
-python scripts/update_tiny_test_data.py --experiment EXP-2026-002 --n 4 --seed (Get-Random) --fresh
 
+=====================================================================
+9. REVIEW BUNDLE AND TINY TEST DATA
+=====================================================================
+
+Review folder and ZIP:
+    powershell -ExecutionPolicy Bypass -File .\scripts\update_review_bundle.ps1 -experiment EXP-2026-002
+
+Stable 4-ID sample:
+    python scripts/update_tiny_test_data.py --experiment EXP-2026-002 --n 4 --seed 42 --fresh
+Fresh random sample:
+    python scripts/update_tiny_test_data.py --experiment EXP-2026-002 --n 4 --seed (Get-Random) --fresh
+
+
+=====================================================================
+10. POWERSHELL / GIT SNIPPETS
+=====================================================================
+
+Create files/folders:
+    New-Item -ItemType Directory -Path src\behaviour_stat_pipeline\figures -Force | Out-Null
+    New-Item -ItemType File -Path src/behaviour_stat_pipeline/common/exclusions.py
+
+Delete outputs (locally too):
+    del .\outputs\EXP-2026-002\LM\figures\LM_*.png
+
+Find a string/function across files:
+    Get-ChildItem -Recurse -Filter *.py | Select-String "group_gap"
+
+Stop tracking files already added (.gitignore does not untrack files Git already knows;
+this removes them from the index without deleting them locally):
+    git rm -r --cached outputs
+    git rm -r --cached data/processed
+
+All column names of a processed CSV (header only):
+    Get-ChildItem data\experiments\EXP-2026-002\processed\LM_processed.csv | ForEach-Object { Import-Csv $_ | Get-Member -MemberType NoteProperty | Select-Object -ExpandProperty Name } | Sort-Object -Unique
+    Get-ChildItem data\experiments\EXP-2026-002\raw\nor\27a_FAM_output_summary.csv | ForEach-Object { Import-Csv $_ | Get-Member -MemberType NoteProperty | Select-Object -ExpandProperty Name } | Sort-Object -Unique

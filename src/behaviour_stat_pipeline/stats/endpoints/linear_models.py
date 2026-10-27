@@ -106,11 +106,15 @@ def validate_model_spec(spec: dict, where: str, factors: list[str]) -> list[str]
     if spec.get("method", "REML") not in ("REML", "ML"):
         errors.append(f"{where}: method must be REML or ML")
     covariates = list(spec.get("covariates", []) or []) + (["baseline"] if baseline else [])
-    allowed_vars = set(factors) | set(covariates) | ({stack_as} if stack_as else set())
+    # `day`: numeric time of each stacked session, from assay_instances.<NAME>.day
+    allowed_vars = set(factors) | set(covariates) | ({stack_as, "day"} if stack_as else set())
     used = formula_variables(str(spec.get("fixed", "")))
     bad = sorted(used - allowed_vars)
     if bad:
-        errors.append(f"{where}: fixed uses {bad}; allowed: factors {factors}, covariates {covariates}, stack_as")
+        errors.append(
+            f"{where}: fixed uses {bad}; allowed: factors {factors}, covariates {covariates}, "
+            f"stack_as and (with stack_as) day"
+        )
     if baseline and "baseline" not in used:
         errors.append(f"{where}: baseline is set but 'baseline' is not in fixed")
     for v in spec.get("variance_by", []) or []:
@@ -168,16 +172,27 @@ def assemble_model_data(
     *,
     id_col: str,
     factors: list[str],
+    instance_days: Optional[dict[str, float]] = None,
 ) -> pd.DataFrame:
     """
     Build the analysis table: one row per mouse (single assay) or mouse x stacked
     assay. `frames` maps assay instance (lower case) -> processed data with
     metadata merged and exclusions already applied (excluded values set to NaN).
-    Adds baseline__<endpoint> columns when spec['baseline'] is set.
+    Stacked rows follow the order of spec['assays'] (the caller sorts it by the
+    declared battery order). Adds baseline__<endpoint> columns when spec['baseline']
+    is set, and a numeric `day` column when the fixed formula uses it.
     """
     endpoints = list(spec["endpoints"])
     covariates = list(spec.get("covariates", []) or [])
     stack_as = spec.get("stack_as")
+    uses_day = "day" in formula_variables(str(spec.get("fixed", "")))
+    if uses_day:
+        no_day = [a.upper() for a in spec["assays"] if str(a).lower() not in (instance_days or {})]
+        if no_day:
+            raise ValueError(
+                f"linear_models '{spec['name']}': fixed uses day, but assay_instances.<NAME>.day is not set "
+                f"for {no_day} in the experiment config"
+            )
     random_vars = sorted(formula_variables(str(spec.get("random") or "")) - {stack_as})
     keep = list(dict.fromkeys([id_col, *factors, *covariates, *random_vars]))
 
@@ -190,6 +205,8 @@ def assemble_model_data(
         piece = df[keep + endpoints].copy()
         if stack_as:
             piece[stack_as] = assay.upper()
+        if uses_day:
+            piece["day"] = float(instance_days[assay])
         pieces.append(piece)
     long = pd.concat(pieces, ignore_index=True)
 
@@ -239,7 +256,8 @@ def fit_models_r(
     factor_names = [f for f in [*factors, stack_as] if f and f in long.columns]
     levels = _factor_levels(long, factor_names, factor_orders or {})
     if stack_as:
-        # Keep the configured assay order for the stacked factor
+        # Stacked factor levels follow spec['assays'], which the caller sorts by the declared
+        # battery order (assay_instances.<NAME>.order), never by name
         levels[stack_as] = [a.upper() for a in spec["assays"] if a.upper() in levels[stack_as]]
 
     r_spec: dict[str, Any] = {

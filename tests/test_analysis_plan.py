@@ -6,6 +6,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
+import pandas as pd
 import pytest
 import yaml
 
@@ -13,8 +14,10 @@ from behaviour_stat_pipeline.stats.common import (
     ConfigError,
     endpoint_role,
     load_stats_config,
+    ordered_instances,
     resolve_config,
 )
+from behaviour_stat_pipeline.stats.endpoints.linear_models import assemble_model_data, validate_model_spec
 from behaviour_stat_pipeline.stats.provenance import frozen_plan_status
 
 REPO = Path(__file__).resolve().parents[1]
@@ -54,6 +57,50 @@ def test_endpoint_role_by_instance_type_and_model():
     assert endpoint_role(cfg, "oft2", "total_distance_moved") == "primary"  # declared for the assay type
     assert endpoint_role(cfg, "oft2", "time_in_center") == "exploratory"
     assert endpoint_role(cfg, "sessions", "time_in_center") == "primary"
+
+
+def timeline_cfg(**instances):
+    return load_stats_config(STATS, {"assay_instances": instances})
+
+
+def test_sessions_follow_declared_order_not_names():
+    cfg = timeline_cfg(OFT1={"order": 1}, OFT2={"order": 4}, OFT3={"order": 2}, OFT4={"order": 3})
+    assert ordered_instances(cfg, ["oft2", "oft3", "oft4"], baseline="oft1", what="m") == ["oft3", "oft4", "oft2"]
+
+
+def test_missing_order_names_the_fields_to_fill():
+    cfg = timeline_cfg(OFT1={"order": 1}, OFT2={"order": None}, OFT3={})
+    with pytest.raises(ConfigError, match=r"\['OFT2', 'OFT3'\]"):
+        ordered_instances(cfg, ["oft2", "oft3"], baseline="oft1", what="m")
+
+
+def test_baseline_must_come_before_sessions():
+    cfg = timeline_cfg(OFT1={"order": 3}, OFT2={"order": 1}, OFT3={"order": 2})
+    with pytest.raises(ConfigError, match="does not come before"):
+        ordered_instances(cfg, ["oft2", "oft3"], baseline="oft1", what="m")
+
+
+def test_invalid_or_duplicate_order_is_an_error():
+    with pytest.raises(ConfigError, match="same order 2"):
+        timeline_cfg(OFT1={"order": 2}, OFT2={"order": 2})
+    with pytest.raises(ConfigError, match="must be an integer"):
+        timeline_cfg(OFT1={"order": "first"})
+
+
+def test_day_column_added_and_required_when_used():
+    frames = {a: pd.DataFrame({"mouse_id": ["m1", "m2"], "group": ["c", "i"], "y": [1.0, 2.0]})
+              for a in ["oft2", "oft3"]}
+    spec = {"name": "m", "assays": ["oft2", "oft3"], "stack_as": "session", "endpoints": ["y"],
+            "fixed": "group * day", "random": "~ 1 | mouse_id"}
+    long = assemble_model_data(frames, spec, id_col="mouse_id", factors=["group"],
+                               instance_days={"oft2": 1.0, "oft3": 8.0})
+    assert long.groupby("session")["day"].first().to_dict() == {"OFT2": 1.0, "OFT3": 8.0}
+    with pytest.raises(ValueError, match=r"day is not set .*\['OFT3'\]"):
+        assemble_model_data(frames, spec, id_col="mouse_id", factors=["group"], instance_days={"oft2": 1.0})
+    # day is only available for stacked sessions
+    errs = validate_model_spec({"name": "m", "assays": ["oft2"], "endpoints": ["y"], "fixed": "group * day"},
+                               "m", ["group"])
+    assert any("fixed uses ['day']" in e for e in errs)
 
 
 @pytest.mark.skipif(shutil.which("git") is None, reason="git not available")

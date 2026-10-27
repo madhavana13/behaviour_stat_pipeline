@@ -15,8 +15,10 @@ from behaviour_stat_pipeline.common.exclusions import (
 )
 
 from behaviour_stat_pipeline.stats.common import (
+    ConfigError,
     endpoint_role,
     load_stats_config,
+    ordered_instances,
     load_yaml_strict,
     read_processed,
     read_subjects,
@@ -565,6 +567,7 @@ def run_linear_models_stage(
     logs_dir = out_root / "MODELS" / "logs"
     tables_dir.mkdir(parents=True, exist_ok=True)
 
+    model_errors: list[str] = []
     for spec in cfg.linear_models_models:
         name = spec["name"]
         needed = [str(a).lower() for a in spec["assays"]] + ([str(spec["baseline"]).lower()] if spec.get("baseline") else [])
@@ -572,6 +575,17 @@ def run_linear_models_stage(
         if not_run:
             print(f"NOTE [MODELS:{name}]: skipped; assays {not_run} not in this run.")
             continue
+
+        # Repeated sessions and baselines follow the declared battery order, never the names
+        if spec.get("stack_as") or spec.get("baseline"):
+            try:
+                spec = {**spec, "assays": ordered_instances(
+                    cfg, spec["assays"], baseline=spec.get("baseline"), what=f"linear_models '{name}'"
+                )}
+            except ConfigError as e:
+                print(f"ERROR [MODELS:{name}]: {e}")
+                model_errors.append(str(e))
+                continue
 
         endpoints = list(spec["endpoints"])
         frames = {}
@@ -594,12 +608,15 @@ def run_linear_models_stage(
         )
         prov["rscript"] = rscript
         prov["analysis_plan"] = plan
+        prov["session_order"] = [a.upper() for a in spec["assays"]]
         if prov["git"]["dirty"] and args.require_clean:
             raise SystemExit(f"ERROR: --require-clean set and uncommitted changes: {prov['git']['dirty_files']}")
         model_cfg = replace(cfg, run_id=prov["run_id"])
 
         long = apply_transforms(
-            assemble_model_data(frames, spec, id_col=cfg.mouse_id_col, factors=factors), spec
+            assemble_model_data(frames, spec, id_col=cfg.mouse_id_col, factors=factors,
+                                instance_days=cfg.instance_day),
+            spec,
         )
         out = fit_models_r(
             long, spec, id_col=cfg.mouse_id_col, factors=factors,
@@ -651,6 +668,10 @@ def run_linear_models_stage(
             path = tables_dir / f"{name}_{table}.csv"
             write_table(df_out, path, model_cfg)
             log_written(path)
+
+    if model_errors:
+        # Everything else has been written; make sure the missing model is not overlooked
+        raise SystemExit("ERROR: linear model(s) not fitted:\n  - " + "\n  - ".join(model_errors))
 
 
 def run_diagnostics(df: pd.DataFrame, cfg, assay: str, exclusions: pd.DataFrame) -> None:

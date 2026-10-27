@@ -30,9 +30,16 @@ assay_patterns:
   nor: "*_output_summary.csv"
 
 assay_instances:
+  # order: position of each test in the battery (1 = first test run). Required for any
+  #        analysis that stacks sessions or uses a baseline; sessions follow this order,
+  #        never their names. TODO: fill in for EXP-2026-002.
+  # day:   optional, e.g. days relative to IFS onset (negative = before). Lets models use
+  #        time as a number (fixed: "group * day").
 
   OFT1:
     assay_type: OFT
+    order: null   # TODO
+    day: null
     raw_path: data/experiments/EXP-2026-002/raw/OFT1
     classifier_pattern: "*_Report_summary.csv"
     session: pre
@@ -40,6 +47,8 @@ assay_instances:
 
   OFT2:
     assay_type: OFT
+    order: null   # TODO
+    day: null
     raw_path: data/experiments/EXP-2026-002/raw/OFT2
     classifier_pattern: "*_Report_summary.csv"
     session: post
@@ -47,6 +56,8 @@ assay_instances:
 
   OFT3:
     assay_type: OFT
+    order: null   # TODO
+    day: null
     raw_path: data/experiments/EXP-2026-002/raw/OFT3
     classifier_pattern: "*_Report_summary.csv"
     session: post
@@ -54,6 +65,8 @@ assay_instances:
 
   OFT4:
     assay_type: OFT
+    order: null   # TODO
+    day: null
     raw_path: data/experiments/EXP-2026-002/raw/OFT4
     classifier_pattern: "*_Report_summary.csv"
     session: post
@@ -61,18 +74,24 @@ assay_instances:
 
   NOR:
     assay_type: NOR
+    order: null   # TODO
+    day: null
     raw_path: data/experiments/EXP-2026-002/raw/nor
     classifier_pattern: "*_Report_summary.csv"
     session: pre
 
   VIT:
     assay_type: VIT
+    order: null   # TODO
+    day: null
     raw_path: data/experiments/EXP-2026-002/raw/vit
     classifier_pattern: "*_Report_summary.csv"
     session: pre
 
   LM:
     assay_type: LM
+    order: null   # TODO
+    day: null
     raw_path: data/experiments/EXP-2026-002/raw/lm
     classifier_pattern: "*_Report_summary.csv"
     session: post
@@ -80,6 +99,8 @@ assay_instances:
 
   MISC:
     assay_type: MISC
+    order: null   # TODO
+    day: null
     raw_path: data/experiments/EXP-2026-002/metadata/misc_raw.csv
     session: post
 
