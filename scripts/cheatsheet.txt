@@ -23,6 +23,8 @@ python scripts/run_assay.py --assay oft2 --config $cfg --experiment-config $exp
 python scripts/run_assay.py --assay oft3 --config $cfg --experiment-config $exp
 python scripts/run_assay.py --assay oft4 --config $cfg --experiment-config $exp
 python scripts/run_assay.py --assay misc --config $cfg --experiment-config $exp
+python scripts/run_assay.py --assay spl  --config $cfg --experiment-config $exp   (sucrose splash test; same parameters as OFT;
+                                                                                 needs an SPL entry in assay_instances, see guide section 4)
 (EXP-2025-001 also has: --assay epm, --assay oft)
 
 

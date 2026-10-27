@@ -416,6 +416,22 @@ class OFTRunner(SingleSessionRunner):
         return derive_oft_metrics(long_df, cfg=OFTConfig())
 
 
+class SPLRunner(OFTRunner):
+    """
+    Sucrose splash test (SPL): same ingestion parameters as OFT (EthoVision summary +
+    classifier report, one session per mouse). Column aliases: schema_aliases.yaml -> spl,
+    which mirrors oft.
+    """
+    assay_name = "SPL"
+    default_output = "data/processed/SPL_processed.csv"
+
+    def run_qc(self, long_df: pd.DataFrame) -> None:
+        qc_oft(long_df, label=self.assay_name)
+
+    def derive_processed(self, long_df: pd.DataFrame) -> pd.DataFrame:
+        return derive_oft_metrics(long_df, cfg=OFTConfig(), label=self.assay_name)
+
+
 class EPMRunner(SingleSessionRunner):
     assay_name = "EPM"
     default_output = "data/processed/EPM_processed.csv"
@@ -537,6 +553,7 @@ class MISCRunner(BaseAssayRunner):
 RUNNER_REGISTRY: dict[str, BaseAssayRunner] = {
     "VIT": VITRunner(),
     "OFT": OFTRunner(),
+    "SPL": SPLRunner(),
     "EPM": EPMRunner(),
     "NOR": NORRunner(),
     "LM": LMRunner(),

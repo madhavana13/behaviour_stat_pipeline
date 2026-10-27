@@ -186,3 +186,15 @@ Checkpoint – Declared test order; pipeline guide
 ### Action needed
 - EXP-2026-002: fill `order` (and optionally `day`) for every assay instance. Until then
   `oft_post_sessions` is not fitted.
+
+2026-10-27 (d)
+Checkpoint – Sucrose splash test (SPL) assay
+
+### Added
+- New assay type `SPL` (sucrose splash test), ingested with the same parameters as OFT:
+  `SPLRunner` reuses OFT's ingestion, classifier merge, duplicate coalescing, QC and derivation
+  (messages now name the assay); `schema_aliases.yaml -> spl` is a YAML alias of the OFT mapping;
+  SPL rows in `labels.csv`; `design.within_factors.spl`.
+- Test: the same raw export ingested as OFT and as SPL gives identical processed tables apart from
+  columns that only carry the assay name.
+- No experiment uses SPL yet; add it under `assay_instances` and `analysis` (see guide, section 4).

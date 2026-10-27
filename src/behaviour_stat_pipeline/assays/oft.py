@@ -1,6 +1,10 @@
 """
 OFT (Open Field Test) assay helpers.
 
+Also used for the sucrose splash test (SPL), which is ingested with the same
+parameters as OFT (EthoVision summary + classifier report, one session per mouse);
+`label` only changes the assay name in messages.
+
 Design decision:
 - Processed output = one row per mouse_id × timepoint.
 
@@ -30,7 +34,7 @@ class OFTConfig:
     """Configuration placeholder for future OFT-specific derived metrics."""
     pass
 
-def _coalesce_duplicate_rows_oft(df: pd.DataFrame) -> pd.DataFrame:
+def _coalesce_duplicate_rows_oft(df: pd.DataFrame, label: str = "OFT") -> pd.DataFrame:
     """
     Coalesce duplicate OFT rows at mouse_id × timepoint when they are
     complementary partial records.
@@ -102,19 +106,19 @@ def _coalesce_duplicate_rows_oft(df: pd.DataFrame) -> pd.DataFrame:
 
     if conflicting_keys:
         raise ValueError(
-            "OFT QC failed: duplicate rows with genuinely conflicting non-missing values "
+            f"{label} QC failed: duplicate rows with genuinely conflicting non-missing values "
             f"detected for keys {conflicting_keys[:10]}"
         )
 
     print(
-        "WARNING [OFT]: complementary duplicate rows detected. "
+        f"WARNING [{label}]: complementary duplicate rows detected. "
         "Rows were coalesced at mouse_id × timepoint."
     )
     out = pd.DataFrame(resolved_rows).reset_index(drop=True)
     return out
 
 
-def qc_oft(df: pd.DataFrame) -> pd.DataFrame:
+def qc_oft(df: pd.DataFrame, label: str = "OFT") -> pd.DataFrame:
     """
     QC for OFT ingestion output.
 
@@ -123,22 +127,22 @@ def qc_oft(df: pd.DataFrame) -> pd.DataFrame:
     """
     missing = REQUIRED_COLUMNS - set(df.columns)
     if missing:
-        raise ValueError(f"OFT QC failed: missing required columns: {sorted(missing)}")
+        raise ValueError(f"{label} QC failed: missing required columns: {sorted(missing)}")
 
     for col in ["mouse_id", "group", "sex", "timepoint"]:
         if df[col].isna().any():
-            raise ValueError(f"OFT QC failed: NA values found in column '{col}'")
+            raise ValueError(f"{label} QC failed: NA values found in column '{col}'")
 
     # NEW: resolve safe duplicates first
-    df = _coalesce_duplicate_rows_oft(df)
+    df = _coalesce_duplicate_rows_oft(df, label=label)
 
     # enforce uniqueness AFTER resolution
-    assert_unique_key(df, ["mouse_id", "timepoint"], where="OFT long/session-level")
+    assert_unique_key(df, ["mouse_id", "timepoint"], where=f"{label} long/session-level")
 
     return df
 
 
-def derive_oft_metrics(df: pd.DataFrame, cfg: OFTConfig | None = None) -> pd.DataFrame:
+def derive_oft_metrics(df: pd.DataFrame, cfg: OFTConfig | None = None, label: str = "OFT") -> pd.DataFrame:
     """
     Add derived metrics for OFT.
 
@@ -151,7 +155,7 @@ def derive_oft_metrics(df: pd.DataFrame, cfg: OFTConfig | None = None) -> pd.Dat
     """
     cfg = cfg or OFTConfig()
 
-    df = qc_oft(df)
+    df = qc_oft(df, label=label)
     out = df.copy()
     out["is_after"] = (out["timepoint"].astype(str).str.lower() == "after").astype(int)
     return out

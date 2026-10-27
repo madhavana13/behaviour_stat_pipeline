@@ -65,7 +65,7 @@ nor:
     "classifications.Grooming.count": "grooming_count"
     "classifications.Digging.time": "digging_time"
     "classifications.Digging.count": "digging_count"
-oft:
+oft: &oft_aliases
   raw:
     "average speed": "mean_speed"
     "time in arena": "total_time_in_arena"
@@ -110,6 +110,10 @@ oft:
     "classifications.Grooming.count": "grooming_count"
     "classifications.Digging.time": "digging_time"
     "classifications.Digging.count": "digging_count"
+
+# Sucrose splash test (SPL): same EthoVision/classifier export as OFT, so the same aliases.
+# Replace `*oft_aliases` with its own `raw:` mapping if the SPL arena/zones ever differ.
+spl: *oft_aliases
 
 epm:
   raw:

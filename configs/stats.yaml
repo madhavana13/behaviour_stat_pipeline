@@ -38,6 +38,7 @@ design:
   within_factors:
     vit: []
     oft: []
+    spl: []
     epm: []
     nor: []
     lm: []

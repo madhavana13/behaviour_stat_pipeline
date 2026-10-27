@@ -65,3 +65,13 @@ VIT,standing__Before__distance moved in left lower quadrant,Distance moved in le
 VIT,standing__Before__distance moved in left upper quadrant,Distance moved in left upper quadrant (standing before),Distance (m)
 VIT,standing__Before__distance moved in right lower quadrant,Distance moved in right lower quadrant (standing before),Distance (m)
 VIT,standing__Before__distance moved in right upper quadrant,Distance moved in right upper quadrant (standing before),Distance (m)
+SPL,total_distance_moved,Total distance moved,Total distance moved (m)
+SPL,time_in_center,Time spent in center,Time in center (s)
+SPL,distance_moved_in_center,Distance moved in center,Distance in center (m)
+SPL,time_in_corners,Time spent in corners,Time in corners (s)
+SPL,classifier__supported_rearing_time,Time spent supported rearing,Supported rearing time (s)
+SPL,classifier__unsupported_rearing_time,Time spent unsupported rearing,Unsupported rearing time (s)
+SPL,classifier__supported_rearing_count,Number of supported rearing events,Supported rearing events
+SPL,classifier__unsupported_rearing_count,Number of unsupported rearing events,Unsupported rearing events
+SPL,classifier__grooming_time,Time spent grooming,Grooming time (s)
+SPL,classifier__grooming_count,Number of grooming events,Grooming events

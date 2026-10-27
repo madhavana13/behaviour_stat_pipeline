@@ -18,6 +18,8 @@ Currently supported assays include:
 - OFT (Open Field Test)
 - EPM (Elevated Plus Maze)
 - VIT (Voluntary Interaction Test)
+- LM, MISC (adrenals, sucrose preference, tail suspension, marbles)
+- SPL (Sucrose Splash Test; ingested with the same parameters as OFT)
 
 ---
 

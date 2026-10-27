@@ -57,7 +57,7 @@ outputs/<EXP>/
   <ASSAY>/tables/  <ASSAY>/figures/  <ASSAY>/logs/
   MODELS/tables/   MODELS/logs/
 src/behaviour_stat_pipeline/
-  assays/        ingestion per assay type (registry.py: VIT, OFT, EPM, NOR, LM, MISC)
+  assays/        ingestion per assay type (registry.py: VIT, OFT, SPL, EPM, NOR, LM, MISC)
   common/        schema normalisation, exclusions, QC
   stats/         statistics; stats/endpoints/ one module per analysis; stats/r/ optional R backend
   figures/       box plots, scatter, Kaplan-Meier
@@ -141,6 +141,27 @@ For one assay instance:
 6. Writes `processed/<INSTANCE>_processed.csv` and a summary log.
 
 Processed files are never edited by the statistics; exclusions are applied at analysis time.
+
+**Sucrose splash test (SPL)** is ingested with the same parameters as OFT: same EthoVision summary
+and classifier report, same column aliases (`schema_aliases.yaml -> spl` points to the OFT mapping),
+same QC. To add it to an experiment:
+
+```yaml
+assay_instances:
+  SPL:
+    assay_type: SPL
+    raw_path: data/experiments/<EXP>/raw/spl
+    classifier_pattern: "*_Report_summary.csv"
+    order: 6
+analysis:
+  assays: [..., spl]
+  secondary_two_way_anova:
+    endpoints:
+      spl: [classifier__grooming_time, classifier__grooming_count, total_distance_moved]
+```
+
+Grooming is the main SPL outcome. If a *latency to first groom* is exported, analyse it under
+`time_to_event` (mice that never groom are censored), not in the ANOVA.
 
 ---
 
