@@ -8,7 +8,7 @@ import yaml
 
 from behaviour_stat_pipeline.figures.runner import run_figures_from_config
 from behaviour_stat_pipeline.common.exclusions import load_exclusions
-from behaviour_stat_pipeline.stats.common import resolve_config
+from behaviour_stat_pipeline.stats.common import ConfigError, read_groups, resolve_config
 
 
 def load_yaml(path: str | Path) -> dict[str, Any]:
@@ -131,6 +131,10 @@ def main() -> None:
         figures_cfg=figures_cfg,
     )
 
+    group_order, group_labels, group_colors, group_errors = read_groups(exp_cfg)
+    if group_errors:
+        raise ConfigError("Invalid groups in experiment config:\n  - " + "\n  - ".join(group_errors))
+
     exp_paths = exp_cfg.get("paths", {}) or {}
 
     exclusions_path = (
@@ -181,6 +185,9 @@ def main() -> None:
             sex_col=sex_col,
             exclusions=exclusions,
             trial_duration_s=float(trial_duration_s) if trial_duration_s is not None else None,
+            group_order=group_order,
+            group_labels=group_labels,
+            group_colors=group_colors,
         )
 
         written_all.extend(written)

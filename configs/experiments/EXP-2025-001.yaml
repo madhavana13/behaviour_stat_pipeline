@@ -1,9 +1,9 @@
 experiment:
   id: EXP-2025-001
 
-group_order:
-  - cup
-  - tail
+groups:                      # single place for group order, display labels and colours
+  order: [cup, tail]
+  colors: {cup: darkorange, tail: dimgray}
 paths:
   metadata_subjects: data/experiments/EXP-2025-001/metadata/subjects.csv
   processed_dir: data/experiments/EXP-2025-001/processed
@@ -68,6 +68,8 @@ analysis:
         di_iz: 0.0
   diagnostics:
     endpoints:
+      # OFT: this experiment's export is the older format (no classifier__ prefix; rearing
+      # recorded as supported_rearing_time etc.; no grooming/digging)
       nor:
         - fam_total_explore_time
         - test_novel_explore_time
@@ -82,14 +84,10 @@ analysis:
         - time_in_center
         - distance_moved_in_center
         - time_in_corners
-        - classifier__supported_rearing_time
-        - classifier__supported_rearing_count
-        - classifier__unsupported_rearing_time
-        - classifier__unsupported_rearing_count
-        - classifier__grooming_time
-        - classifier__grooming_count
-        - classifier__digging_time
-        - classifier__digging_count
+        - supported_rearing_time
+        - supported_rearing_count
+        - unsupported_rearing_time
+        - unsupported_rearing_count
       epm:
         - count_head_dips
         - count_psap
@@ -116,6 +114,8 @@ analysis:
         - standing__Before__distance_moved_in_right_upper_quadrant
   secondary_two_way_anova:
     endpoints:
+      # OFT: this experiment's export is the older format (no classifier__ prefix; rearing
+      # recorded as supported_rearing_time etc.; no grooming/digging)
       nor:
         - fam_total_explore_time
         - test_novel_explore_time
@@ -130,14 +130,10 @@ analysis:
         - time_in_center
         - distance_moved_in_center
         - time_in_corners
-        - classifier__supported_rearing_time
-        - classifier__supported_rearing_count
-        - classifier__unsupported_rearing_time
-        - classifier__unsupported_rearing_count
-        - classifier__grooming_time
-        - classifier__grooming_count
-        - classifier__digging_time
-        - classifier__digging_count
+        - supported_rearing_time
+        - supported_rearing_count
+        - unsupported_rearing_time
+        - unsupported_rearing_count
       epm:
         - count_head_dips
         - count_psap

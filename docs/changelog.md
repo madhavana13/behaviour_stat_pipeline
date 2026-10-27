@@ -229,3 +229,22 @@ Checkpoint – Remove hardcoded assay details and the 2 x 2 assumption
 ### Known issues
 - Group colours in figures.yaml are shared across experiments: `ifs` and `stressed` are both
   darkorange (to be fixed with per-experiment group order/labels/colours).
+
+2026-10-27 (f)
+Checkpoint – Group order, labels and colours declared once per experiment
+
+### Changed
+- New experiment-config block `groups: {order, labels, colors}` replaces: experiment `group_order`,
+  figures.yaml `defaults.group_order` / `group_edgecolors` / per-figure `group_order`,
+  stats.yaml `factors.*.order` and `factor_orders.group`, and the hardcoded "IFS" label.
+  Setting group order/colours anywhere else is now an error.
+- EXP-2025-001 figures now show its declared order (cup, tail); before, figures.yaml's shared order
+  put tail first. All 121 stats tables unchanged (posthoc already ordered cup, tail alphabetically).
+- Groups without a colour get distinct Okabe-Ito colours; duplicate colours, undeclared groups in the
+  data, and the old `group_order` key are errors. (figures.yaml had ifs and stressed both darkorange.)
+- EXP-2025-001 plan: removed the 8 OFT `classifier__*` endpoints, which do not exist in that
+  experiment's OFT export (they were skipped with a warning by stats and made run_figures fail).
+  Its export records rearing as `supported_rearing_time` etc.; those 4 rearing endpoints (time and
+  count, supported and unsupported) were then ADDED to its OFT ANOVA and diagnostics (labels added to
+  labels.csv). This changes EXP-2025-001 OFT results: 4 new endpoints, and the Holm family per term
+  grows from 4 to 8 endpoints, so p_adj of the existing OFT endpoints increases.

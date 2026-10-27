@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import hashlib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
@@ -12,6 +12,8 @@ class PlotStyle:
     # aesthetics driven by config
     group_edgecolors: Dict[str, str]
     sex_markers: Dict[str, str]
+    # display label per group value (experiment config groups.labels)
+    group_labels: Dict[str, str] = field(default_factory=dict)
 
     # box aesthetics
     box_linewidth: float = 2.0

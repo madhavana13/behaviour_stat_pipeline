@@ -11,6 +11,7 @@ from .common import PlotStyle, require_columns
 from .km import plot_km
 from .scatter import plot_group_scatter
 from behaviour_stat_pipeline.common.exclusions import apply_exclusions_for_endpoint
+from behaviour_stat_pipeline.stats.common import check_groups_in_data
 from behaviour_stat_pipeline.stats.endpoints.time_to_event import build_survival_data
 
 def _make_long_from_mapping(
@@ -365,7 +366,14 @@ def run_figures_from_config(
     sex_col: str = "sex",
     exclusions: pd.DataFrame | None = None,
     trial_duration_s: float | None = None,
+    group_order: List[str] | None = None,
+    group_labels: Dict[str, str] | None = None,
+    group_colors: Dict[str, str] | None = None,
 ) -> List[Path]:
+    """
+    group_order / group_labels / group_colors come from the experiment config `groups:` block
+    (the only place they are defined); figures.yaml no longer holds group-specific settings.
+    """
     fig_cfg = config.get("figures", {})
     if not fig_cfg or not fig_cfg.get("enabled", False):
         return []
@@ -378,7 +386,8 @@ def run_figures_from_config(
         raise ValueError("figures.defaults.figure_size must be a 2-element list, e.g. [5.2, 4.2]")
 
     style = PlotStyle(
-        group_edgecolors=defaults.get("group_edgecolors", {}),
+        group_edgecolors=dict(group_colors or {}),
+        group_labels=dict(group_labels or {}),
         sex_markers=defaults.get("sex_markers", {}),
         group_gap=float(defaults.get("group_gap", 0.6)),
         box_linewidth=float(defaults.get("box_linewidth", 1.1)),
@@ -437,6 +446,12 @@ def run_figures_from_config(
 
     df = pd.read_csv(processed_path)
     require_columns(df, [mouse_id_col, group_col, sex_col])
+    if not group_order:
+        raise ValueError("Figures need the experiment's groups.order (experiment config).")
+    check_groups_in_data(df[group_col], list(group_order), where=f"figures {output_prefix}")
+    for key in ("group_order", "group_edgecolors"):
+        if key in defaults:
+            raise ValueError(f"figures.yaml defaults.{key} is no longer used: set groups in the experiment config")
 
     written: List[Path] = []
     label_map = _load_label_map(config)
@@ -480,6 +495,11 @@ def run_figures_from_config(
     for spec in specs:
         if str(spec.get("assay", "")).lower() != assay_config_key.lower():
             continue
+        if "group_order" in spec:
+            raise ValueError(
+                f"figures.yaml spec {spec.get('name', spec.get('type'))!r} sets group_order; group order comes "
+                f"from the experiment config (groups.order) only"
+            )
 
         plot_type = str(spec.get("type", "")).lower()
         if plot_type not in ("boxpoints", "scatter", "km"):
@@ -492,7 +512,6 @@ def run_figures_from_config(
         if plot_type == "boxpoints":
             value_label = spec.get("value_label", None)
             x_order = spec.get("x_order", None)
-            group_order = spec.get("group_order", defaults.get("group_order", None))
             sex_order = spec.get("sex_order", ["female", "male"])
 
             w2l = spec.get("wide_to_long", None)
@@ -530,6 +549,7 @@ def run_figures_from_config(
 
             style_spec = PlotStyle(
                 group_edgecolors=style.group_edgecolors,
+                group_labels=style.group_labels,
                 sex_markers=style.sex_markers,
                 box_linewidth=style.box_linewidth,
                 median_linewidth=style.median_linewidth,
@@ -667,7 +687,7 @@ def run_figures_from_config(
                     style=style,
                     group_col=group_col,
                     sex_col=sex_col,
-                    group_order=spec.get("group_order", defaults.get("group_order", None)),
+                    group_order=group_order,
                     sex_order=spec.get("sex_order", ["female", "male"]),
                     x_label=spec.get("x_label", None) or (_label_for_axis(label_map, assay, str(x)) or str(x)),
                     y_label=spec.get("y_label", None) or (_label_for_axis(label_map, assay, str(y)) or str(y)),
@@ -724,7 +744,7 @@ def run_figures_from_config(
                 style=style,
                 group_col=group_col,
                 sex_col=sex_col,
-                group_order=spec.get("group_order", defaults.get("group_order", None)),
+                group_order=group_order,
                 sex_order=spec.get("sex_order", ["female", "male"]),
                 by_sex=bool(spec.get("by_sex", False)),
                 x_label=str(spec.get("x_label", "Time (s)")),

@@ -25,11 +25,9 @@ subjects:
 
 factors:
   group:
-    column: group
-    order: null   # or ["control", "stressed"] etc.
+    column: group       # order, labels, colours: experiment config `groups:` block
   sex:
-    column: sex
-    order: ["female", "male"]  # recommended to lock order
+    column: sex         # order: secondary_two_way_anova.factor_orders.sex
 
 design:
   # These are COLUMN NAMES, not levels. Levels can be cup/tail OR stress/control etc.
@@ -86,7 +84,6 @@ secondary_two_way_anova:
   correction_across_endpoints: holm
 
   factor_orders:
-    group: []                 # empty = infer deterministically
     sex: ["female", "male"]   # lock ordering
 
   # endpoints: experiment config analysis.secondary_two_way_anova.endpoints

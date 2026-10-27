@@ -73,7 +73,7 @@ tests/           smoke tests, reference tests against R, config tests
 |---|---|---|---|
 | Methods | `configs/stats.yaml` | correction methods, ANOVA type, posthoc pairs, diagnostic thresholds, R location | the lab changes how it analyses data (rare; goes in the changelog) |
 | Experiment | `configs/experiments/<EXP>.yaml` | paths, assay instances, **analysis plan** | per experiment |
-| Presentation | `configs/figures.yaml`, `configs/labels.csv` | colours, sizes, labels, manual figures | figures change |
+| Presentation | `configs/figures.yaml`, `configs/labels.csv` | sizes, fonts, sex markers, axis labels, manual figures (nothing group-specific) | figures change |
 
 The experiment's `analysis:` block is merged over `stats.yaml` before anything runs. Mappings merge;
 lists (endpoints, models, specs) in the experiment **replace** the shared ones. Both `run_stats.py`
@@ -83,7 +83,12 @@ and `run_figures.py` use the same merged config.
 
 ```yaml
 experiment: {id: EXP-2026-002}
-group_order: [control, ifs]          # display order in figures
+
+groups:                              # the ONLY place for group order, labels and colours
+  order: [control, ifs]              # every group value in subjects.csv must be listed
+  labels: {ifs: IFS}                 # optional; default: capitalised value
+  colors: {control: darkorchid, ifs: darkorange}   # optional; missing ones get distinct
+                                     # colour-blind-safe colours (Okabe-Ito)
 
 paths:
   metadata_subjects: data/experiments/EXP-2026-002/metadata/subjects.csv
@@ -129,6 +134,11 @@ analysis_frozen_at: <commit sha>     # optional, see section 5.3
 **Assay instances vs assay types.** `OFT1`–`OFT4` are four runs of the same test type `OFT`.
 Endpoint lists can be written once for the type (`oft:`) and apply to every instance; an
 instance-specific list (`oft2:`) takes precedence.
+
+**Groups.** `groups.order` sets the order of groups in every figure, the level positions used in
+posthoc `selected_pairs`, and the direction of linear-model contrasts. Two groups with the same
+colour, a group in the data that is not declared, or group settings anywhere else (`figures.yaml`,
+`factor_orders.group`) are errors.
 
 **Test order.** The pipeline never infers chronology from names. Anything that depends on order
 (stacked sessions in a mixed model, a baseline) requires `order` for the instances involved; a
@@ -402,5 +412,8 @@ change to the statistics. Tests that need R are skipped without it.
 | `also listed in secondary_two_way_anova.endpoints` | a censored latency cannot also go through ANOVA |
 | `linear_models needs R` | install R or set `linear_models.rscript` / `BSP_RSCRIPT` |
 | `Exclusion file configured but not found` | path in the experiment config is wrong |
+| `groups.order is not set` / `group_order has moved` | add the `groups:` block to the experiment config |
+| `groups [...] are in the data but not in groups.order` | a group value in subjects.csv is not declared (typo?) |
+| `several groups share a colour` | give the groups different colours in `groups.colors` |
 | `--require-clean set and uncommitted changes` | commit (or stash) before a reportable run |
 | `analysis plan changed since it was frozen` | the `analysis:` block differs from `analysis_frozen_at`; revert, or re-freeze and document why |

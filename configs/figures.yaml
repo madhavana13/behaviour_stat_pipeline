@@ -53,20 +53,11 @@ figures:
     tick_width: 0.7
     tick_length: 2.5
 
-    group_edgecolors:
-      tail: "dimgray"
-      cup: "darkorange"
-      control: "darkorchid"
-      ifs: "darkorange"
-      stressed: "darkorange"
-      centre: "darkorchid"
-      narrow_centre: "darkorange"
+    # Group order, labels and colours: experiment config `groups:` block (not here)
 
     sex_markers:
       female: "o"
       male: "^"
-
-    group_order: ["tail", "cup", "one", "two", "control", "stressed", "ifs"]
 
     significance:
       enabled: true
@@ -102,7 +93,6 @@ figures:
       type: "boxpoints"
       value_label: "Time with objects (s)"
       x_order: ["Familiar", "Novel"]
-      group_order: ["control", "ifs"]
       figure_size: [4.2, 3.4]
       box_width: 0.08
       group_gap: 0.55
@@ -144,7 +134,6 @@ figures:
       type: "boxpoints"
       value_label: "Distance moved during test (m)"
       x_order: ["Total"]
-      group_order: ["control", "ifs", "tail", "cup"]
       figure_size: [2.65, 3.35]
       box_width: 0.02
       group_gap: 0.06
@@ -162,7 +151,6 @@ figures:
       type: "boxpoints"
       value_label: "Time in Alleys (s)"
       x_order: ["Protected", "Centre", "Narrow"]
-      group_order: ["control", "ifs"]
       figure_size: [4.4, 3.4]
       box_width: 0.055
       group_gap: 0.42
@@ -185,7 +173,6 @@ figures:
       type: "boxpoints"
       value_label: "Time (s)"
       x_order: ["Before", "After"]
-      group_order: ["control", "ifs"]
       figure_size: [4.2, 3.35]
       box_width: 0.055
       group_gap: 0.38

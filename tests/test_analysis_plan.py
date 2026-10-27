@@ -12,9 +12,11 @@ import yaml
 
 from behaviour_stat_pipeline.stats.common import (
     ConfigError,
+    check_groups_in_data,
     endpoint_role,
     load_stats_config,
     ordered_instances,
+    read_groups,
     resolve_config,
 )
 from behaviour_stat_pipeline.stats.endpoints.linear_models import assemble_model_data, validate_model_spec
@@ -24,8 +26,11 @@ REPO = Path(__file__).resolve().parents[1]
 STATS = REPO / "configs" / "stats.yaml"
 
 
+GROUPS = {"order": ["control", "ifs"]}
+
+
 def exp_cfg(**analysis) -> dict:
-    return {"assay_instances": {"OFT2": {"assay_type": "OFT"}}, "analysis": analysis}
+    return {"assay_instances": {"OFT2": {"assay_type": "OFT"}}, "groups": GROUPS, "analysis": analysis}
 
 
 def test_merge_replaces_lists_and_merges_mappings():
@@ -60,7 +65,7 @@ def test_endpoint_role_by_instance_type_and_model():
 
 
 def timeline_cfg(**instances):
-    return load_stats_config(STATS, {"assay_instances": instances})
+    return load_stats_config(STATS, {"assay_instances": instances, "groups": GROUPS})
 
 
 def test_sessions_follow_declared_order_not_names():
@@ -101,6 +106,36 @@ def test_day_column_added_and_required_when_used():
     errs = validate_model_spec({"name": "m", "assays": ["oft2"], "endpoints": ["y"], "fixed": "group * day"},
                                "m", ["group"])
     assert any("fixed uses ['day']" in e for e in errs)
+
+
+def test_groups_block_fills_labels_and_distinct_colours():
+    order, labels, colors, errors = read_groups(
+        {"groups": {"order": ["control", "ifs", "stressed"], "labels": {"ifs": "IFS"}, "colors": {"control": "#E69F00"}}}
+    )
+    assert not errors
+    assert labels == {"control": "Control", "ifs": "IFS", "stressed": "Stressed"}
+    assert colors["control"] == "#E69F00"
+    assert len(set(colors.values())) == 3  # palette skips the colour already used
+
+
+def test_groups_block_errors():
+    _, _, _, errors = read_groups({"groups": {"order": ["a", "b"], "colors": {"a": "red", "b": "red"}}})
+    assert any("share a colour" in e for e in errors)
+    _, _, _, errors = read_groups({"group_order": ["a", "b"]})
+    assert any("group_order has moved" in e for e in errors) and any("groups.order is not set" in e for e in errors)
+    _, _, _, errors = read_groups({"groups": {"order": ["a"], "labels": {"x": "X"}}})
+    assert any("not in groups.order" in e for e in errors)
+    with pytest.raises(ConfigError, match=r"\['stressed'\] are in the data"):
+        check_groups_in_data(pd.Series(["a", "stressed"]), ["a", "b"], where="T")
+
+
+def test_group_order_only_in_experiment_config():
+    e = {"groups": {"order": ["ifs", "control"]},
+         "analysis": {"secondary_two_way_anova": {"factor_orders": {"group": ["control", "ifs"]}}}}
+    with pytest.raises(ConfigError, match="belongs in the experiment config"):
+        load_stats_config(STATS, e)
+    cfg = load_stats_config(STATS, {"groups": {"order": ["ifs", "control"]}})
+    assert cfg.secondary_two_way_anova_factor_orders["group"] == ["ifs", "control"]
 
 
 @pytest.mark.skipif(shutil.which("git") is None, reason="git not available")

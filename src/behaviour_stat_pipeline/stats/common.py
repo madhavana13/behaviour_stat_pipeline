@@ -303,6 +303,10 @@ class StatsConfig:
     # (assay_instances.<NAME>.order) and optional day (assay_instances.<NAME>.day)
     instance_order: dict[str, int] = field(default_factory=dict)
     instance_day: dict[str, float] = field(default_factory=dict)
+    # From the experiment config `groups:` block (single source for order, labels, colours)
+    group_order: list[str] = field(default_factory=list)
+    group_labels: dict[str, str] = field(default_factory=dict)
+    group_colors: dict[str, str] = field(default_factory=dict)
     # Set per run from provenance; stamped onto every output table
     run_id: str = ""
 
@@ -330,8 +334,20 @@ def load_stats_config(path: str | Path, experiment_config: Optional[dict] = None
     instance_order, instance_day, timeline_errors = read_timeline(experiment_config)
     if timeline_errors:
         raise ConfigError("Invalid assay_instances in experiment config:\n  - " + "\n  - ".join(timeline_errors))
+    group_order, group_labels, group_colors = [], {}, {}
+    if experiment_config is not None:
+        group_order, group_labels, group_colors, group_errors = read_groups(experiment_config)
+        if group_errors:
+            raise ConfigError("Invalid groups in experiment config:\n  - " + "\n  - ".join(group_errors))
     cfg = resolve_config(load_yaml_strict(path), experiment_config)
     validate_stats_config(cfg)
+    group_col = ((cfg.get("factors", {}) or {}).get("group", {}) or {}).get("column", "group")
+    stats_group_order = ((cfg.get("secondary_two_way_anova", {}) or {}).get("factor_orders", {}) or {}).get(group_col)
+    if stats_group_order:
+        raise ConfigError(
+            f"secondary_two_way_anova.factor_orders.{group_col} is set; group order belongs in the "
+            f"experiment config (groups.order) only"
+        )
     plan_errors = validate_primary_endpoints(cfg, instance_types)
     if plan_errors:
         raise ConfigError("Invalid analysis plan:\n  - " + "\n  - ".join(plan_errors))
@@ -366,7 +382,10 @@ def load_stats_config(path: str | Path, experiment_config: Optional[dict] = None
     secondary_two_way_anova_endpoints = dict(sec.get("endpoints", {}))
     secondary_two_way_anova_correction = str(sec.get("correction_across_endpoints", "none"))
     secondary_two_way_anova_posthoc = dict(sec.get("posthoc", {}))
-    secondary_two_way_anova_factor_orders = dict(sec.get("factor_orders", {}))    
+    secondary_two_way_anova_factor_orders = dict(sec.get("factor_orders", {}) or {})
+    if group_order:
+        # Level order for posthoc positions and model contrasts comes from the experiment's groups.order
+        secondary_two_way_anova_factor_orders[group_col] = list(group_order)
 
     design = cfg["design"]
     between_factors = list(design.get("between_factors", []))
@@ -453,7 +472,63 @@ def load_stats_config(path: str | Path, experiment_config: Optional[dict] = None
         instance_types=instance_types,
         instance_order=instance_order,
         instance_day=instance_day,
+        group_order=group_order,
+        group_labels=group_labels,
+        group_colors=group_colors,
     )
+
+
+# Okabe & Ito colour-blind-safe palette, used for groups without an explicit colour
+DEFAULT_GROUP_PALETTE = ["#E69F00", "#56B4E9", "#009E73", "#CC79A7", "#0072B2", "#D55E00", "#F0E442", "#000000"]
+
+
+def read_groups(experiment_config: Optional[dict]) -> tuple[list[str], dict[str, str], dict[str, str], list[str]]:
+    """
+    The experiment's groups block, the single place for group order, labels and colours:
+
+        groups:
+          order: [control, ifs]
+          labels: {ifs: IFS}                 # optional; default: capitalised value
+          colors: {control: darkorchid}      # optional; missing ones from DEFAULT_GROUP_PALETTE
+
+    Returns (order, labels for every group, colours for every group, errors).
+    """
+    exp = experiment_config or {}
+    errors: list[str] = []
+    if "group_order" in exp:
+        errors.append("group_order has moved: use groups.order (with optional groups.labels / groups.colors)")
+    groups = exp.get("groups") or {}
+    order = [str(g) for g in (groups.get("order") or [])]
+    if not order:
+        errors.append("groups.order is not set: list the experiment's group values in display/analysis order")
+        return [], {}, {}, errors
+    if len(set(order)) != len(order):
+        errors.append(f"groups.order has duplicates: {order}")
+    unknown = {k: sorted(set(map(str, (groups.get(k) or {}))) - set(order)) for k in ("labels", "colors")}
+    for k, bad in unknown.items():
+        if bad:
+            errors.append(f"groups.{k} names groups not in groups.order: {bad}")
+    labels = {g: str((groups.get("labels") or {}).get(g, g.capitalize())) for g in order}
+    given = {str(g): str(c) for g, c in (groups.get("colors") or {}).items()}
+    dup = sorted({c for c in given.values() if list(given.values()).count(c) > 1})
+    if dup:
+        errors.append(f"groups.colors: several groups share a colour {dup}; groups must be distinguishable")
+    palette = [c for c in DEFAULT_GROUP_PALETTE if c.lower() not in {v.lower() for v in given.values()}]
+    colors = {}
+    for g in order:
+        colors[g] = given[g] if g in given else palette.pop(0)
+    return order, labels, colors, errors
+
+
+def check_groups_in_data(values, order: list[str], where: str) -> None:
+    """Every group value in the data must be declared in groups.order."""
+    observed = sorted({str(v) for v in values if pd.notna(v)})
+    undeclared = [g for g in observed if g not in order]
+    if undeclared:
+        raise ConfigError(
+            f"{where}: groups {undeclared} are in the data but not in groups.order {order} "
+            f"(experiment config). Add them, or check subjects.csv."
+        )
 
 
 def read_timeline(experiment_config: Optional[dict]) -> tuple[dict[str, int], dict[str, float], list[str]]:

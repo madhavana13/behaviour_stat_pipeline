@@ -75,3 +75,7 @@ SPL,classifier__supported_rearing_count,Number of supported rearing events,Suppo
 SPL,classifier__unsupported_rearing_count,Number of unsupported rearing events,Unsupported rearing events
 SPL,classifier__grooming_time,Time spent grooming,Grooming time (s)
 SPL,classifier__grooming_count,Number of grooming events,Grooming events
+OFT,supported_rearing_time,Time spent supported rearing,Supported rearing time (s)
+OFT,supported_rearing_count,Number of supported rearing events,Supported rearing events
+OFT,unsupported_rearing_time,Time spent unsupported rearing,Unsupported rearing time (s)
+OFT,unsupported_rearing_count,Number of unsupported rearing events,Unsupported rearing events

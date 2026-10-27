@@ -11,9 +11,9 @@ from statsmodels.duration.survfunc import SurvfuncRight
 from .common import PlotStyle, infer_order
 
 
-def _group_display(g: str) -> str:
-    # Same convention as boxpoints group labels
-    return "IFS" if str(g).lower() == "ifs" else str(g).capitalize()
+def _group_display(g: str, style: PlotStyle) -> str:
+    # Same convention as boxpoints group labels (experiment config groups.labels)
+    return style.group_labels.get(str(g), str(g).capitalize())
 
 
 def km_steps(time: np.ndarray, event: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
@@ -134,7 +134,7 @@ def plot_km(
             color = style.group_edgecolors.get(str(g), "black")
             t, s, ct, cs = km_steps(dg["_time"].to_numpy(), dg["_event"].to_numpy())
             n_cens = int((dg["_event"] == 0).sum())
-            label = f"{_group_display(g)} (n={len(dg)}" + (f", {n_cens} censored)" if n_cens else ")")
+            label = f"{_group_display(g, style)} (n={len(dg)}" + (f", {n_cens} censored)" if n_cens else ")")
             ax.step(t, s, where="post", color=color, linewidth=linewidth, label=label)
             if ct.size:
                 ax.plot(ct, cs, linestyle="none", marker="|", markersize=censor_marker_size,

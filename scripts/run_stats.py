@@ -16,6 +16,7 @@ from behaviour_stat_pipeline.common.exclusions import (
 
 from behaviour_stat_pipeline.stats.common import (
     ConfigError,
+    check_groups_in_data,
     endpoint_role,
     load_stats_config,
     ordered_instances,
@@ -275,6 +276,9 @@ def prepare_analysis_df(df: pd.DataFrame, subjects: pd.DataFrame, cfg, assay: st
     require_columns(df, within, f"{assay}: within_factors")
     if blocking:
         require_columns(df, blocking, f"{assay}: blocking_factors")
+
+    if cfg.group_order and "group" in df.columns:
+        check_groups_in_data(df["group"], cfg.group_order, where=assay.upper())
 
     df = coerce_categoricals(df, between + within + blocking)
 

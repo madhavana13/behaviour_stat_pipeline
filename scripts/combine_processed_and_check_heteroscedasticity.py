@@ -584,7 +584,7 @@ def main() -> None:
 
     exp_cfg = load_yaml(experiment_config_path)
     experiment_id = exp_cfg.get("experiment_id", experiment_config_path.stem)
-    group_order = exp_cfg.get("group_order", None)
+    group_order = (exp_cfg.get("groups") or {}).get("order")  # experiment config groups.order
 
     process_experiment(experiment_id, group_order=group_order)
 

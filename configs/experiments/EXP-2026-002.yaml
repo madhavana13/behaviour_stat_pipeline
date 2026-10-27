@@ -1,9 +1,10 @@
 experiment:
   id: EXP-2026-002
 
-group_order:
-  - control
-  - ifs
+groups:                      # single place for group order, display labels and colours
+  order: [control, ifs]
+  labels: {ifs: IFS}
+  colors: {control: darkorchid, ifs: darkorange}
 
 paths:
   metadata_subjects: data/experiments/EXP-2026-002/metadata/subjects.csv
