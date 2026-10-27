@@ -12,7 +12,7 @@ Current implementation:
 - OFT exports are typically already one row per mouse per session (summary metrics).
 - We therefore treat the ingestion output as already at the session level and:
     - QC: checks required columns + uniqueness on mouse_id × timepoint
-    - Derive: adds cross-assay flags (is_after) only; does not aggregate
+    - Derive: QC and a copy only; does not aggregate (session order lives in the experiment config)
 
 If you later ingest frame-wise OFT data, we can extend derive_oft_metrics
 to aggregate to mouse_id × timepoint explicitly.
@@ -149,7 +149,7 @@ def derive_oft_metrics(df: pd.DataFrame, cfg: OFTConfig | None = None, label: st
     For now:
     - does not drop rows
     - returns a copy
-    - adds only cross-assay flags
+    - adds nothing yet (session order is declared in the experiment config, not derived here)
 
     Later we can add canonical OFT outcomes and/or change scores explicitly.
     """
@@ -157,7 +157,6 @@ def derive_oft_metrics(df: pd.DataFrame, cfg: OFTConfig | None = None, label: st
 
     df = qc_oft(df, label=label)
     out = df.copy()
-    out["is_after"] = (out["timepoint"].astype(str).str.lower() == "after").astype(int)
     return out
 
 

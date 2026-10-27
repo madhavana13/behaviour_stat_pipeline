@@ -8,9 +8,7 @@ paths:
   metadata_subjects: data/experiments/EXP-2025-001/metadata/subjects.csv
   processed_dir: data/experiments/EXP-2025-001/processed
   interim_dir: data/experiments/EXP-2025-001/interim
-  out_tables: outputs/EXP-2025-001/tables
-  out_figures: outputs/EXP-2025-001/figures
-  out_logs: outputs/EXP-2025-001/logs
+  out_dir: outputs/EXP-2025-001        # results: <out_dir>/<ASSAY>/{tables,figures,logs}, <out_dir>/MODELS
 
 raw:
   vit: data/experiments/EXP-2025-001/raw/vit

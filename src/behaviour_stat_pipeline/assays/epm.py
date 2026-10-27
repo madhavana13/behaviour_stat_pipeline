@@ -65,7 +65,6 @@ def derive_epm_metrics(df: pd.DataFrame, cfg: EPMConfig | None = None) -> pd.Dat
     qc_epm(df)
 
     out = df.copy()
-    out["is_after"] = (out["timepoint"].astype(str).str.lower() == "after").astype(int)
     return out
 
 

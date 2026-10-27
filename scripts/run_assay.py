@@ -5,7 +5,9 @@ import yaml
 
 from behaviour_stat_pipeline.assays.registry import RUNNER_REGISTRY, RunContext
 from behaviour_stat_pipeline.common.schema import load_schema_aliases
-schema_aliases = load_schema_aliases("configs/schema_aliases.yaml")
+from behaviour_stat_pipeline.stats.common import ConfigError, read_groups, require_repo_root
+REPO_ROOT = Path(__file__).resolve().parents[1]
+schema_aliases = load_schema_aliases(REPO_ROOT / "configs" / "schema_aliases.yaml")
 
 def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser()
@@ -74,7 +76,6 @@ def resolve_assay_inputs(
     exp_paths = exp_cfg.get("paths", {})
     exp_raw = exp_cfg.get("raw", {})
     exp_patterns = exp_cfg.get("assay_patterns", {})
-    misc_cfg = shared_cfg.get("misc", {})
 
     subjects = args.subjects or exp_paths.get("metadata_subjects", "data/metadata/subjects.csv")
     out = args.out or str(
@@ -88,13 +89,11 @@ def resolve_assay_inputs(
             or (exp_cfg.get("assay_instances", {}).get(assay_instance, {}) or {}).get("raw_path", "")
             or exp_raw.get(instance_key, "")
             or exp_raw.get(type_key, "")
-            or misc_cfg.get("raw_file", "")
         )
         if not raw_file:
             raise ValueError(
-                "No raw file provided for assay 'MISC'. "
-                "Use --root with the path to misc_raw.csv, or define raw.misc in the experiment config, "
-                "or misc.raw_file in the shared config."
+                "No raw file provided for assay 'MISC'. Use --root with the path to misc_raw.csv, or set "
+                "assay_instances.MISC.raw_path (or raw.misc) in the experiment config."
             )
         return Path(raw_file), "", subjects, out
 
@@ -111,10 +110,14 @@ def resolve_assay_inputs(
 
 
 def main() -> None:
+    require_repo_root(REPO_ROOT)
     ap = build_parser()
     args = ap.parse_args()
     shared_cfg = load_yaml(args.config)
     exp_cfg = load_yaml(args.experiment_config)
+    group_order, _, _, group_errors = read_groups(exp_cfg)
+    if group_errors:
+        raise ConfigError("Invalid groups in experiment config:\n  - " + "\n  - ".join(group_errors))
 
     assay_instance, assay_type, session = resolve_assay_identity(args, exp_cfg)
 
@@ -147,6 +150,7 @@ def main() -> None:
         assay_instance=assay_instance,
         session=session,
         instance_cfg=instance_config(exp_cfg, assay_instance),
+        allowed_groups=tuple(group_order),
     )
 
     RUNNER_REGISTRY[assay_type].run(ctx)

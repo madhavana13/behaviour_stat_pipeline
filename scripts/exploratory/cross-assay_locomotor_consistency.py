@@ -29,7 +29,7 @@ experiment_id = "EXP-2026-002"
 oft2_path = Path(f"data/experiments/{experiment_id}/processed/OFT2_processed.csv")
 lm_path = Path(f"data/experiments/{experiment_id}/processed/LM_processed.csv")
 
-out_base = Path(f"outputs/{experiment_id}/cross_assay")
+out_base = Path(f"outputs/{experiment_id}/exploratory/cross_assay")
 fig_dir = out_base / "figures"
 table_dir = out_base / "tables"
 model_dir = out_base / "models"

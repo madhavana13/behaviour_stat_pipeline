@@ -17,6 +17,8 @@ from behaviour_stat_pipeline.common.exclusions import (
 from behaviour_stat_pipeline.stats.common import (
     ConfigError,
     check_groups_in_data,
+    experiment_paths,
+    require_repo_root,
     endpoint_role,
     load_stats_config,
     ordered_instances,
@@ -98,7 +100,6 @@ def apply_assay_instance_aliases(cfg, exp_cfg: dict):
     # 1. Dict-style assay config
     # -------------------------
     dict_attrs = [
-        "within_factors",
         "primary_one_sample_nulls",
         "secondary_two_way_anova_endpoints",
         "diagnostics_endpoints",
@@ -169,6 +170,30 @@ def apply_assay_instance_aliases(cfg, exp_cfg: dict):
 
     return cfg
     
+def available_or_warn(df: pd.DataFrame, endpoints: list[str], assay: str, what: str) -> list[str]:
+    """Endpoints present in the data; warns about the others (they are skipped, never silently)."""
+    missing = [ep for ep in endpoints if ep not in df.columns]
+    if missing:
+        print(f"WARNING [{assay.upper()}]: skipping missing {what} endpoints: {missing}")
+    available = [ep for ep in endpoints if ep in df.columns]
+    if endpoints and not available:
+        print(f"WARNING [{assay.upper()}]: no available {what} endpoints; skipping {what}.")
+    return available
+
+
+def _scope_suffix(scope: str) -> str:
+    """Primary tables keep their names; sensitivity tables get a _sensitivity suffix."""
+    return "" if scope == "primary" else f"_{scope}"
+
+
+def scopes_differ(exclusions: pd.DataFrame, assay: str) -> bool:
+    """True if some exclusion for this assay applies to only one of primary / sensitivity."""
+    if exclusions is None or exclusions.empty:
+        return False
+    rows = exclusions[exclusions["assay"].astype(str).str.upper().isin([assay.upper(), "*"])]
+    return bool(rows["exclude_from"].isin(["primary", "sensitivity"]).any())
+
+
 def log_written(path: Path) -> None:
     print(f"Wrote: {path}")
 
@@ -261,11 +286,10 @@ def mask_excluded_values(
 def prepare_analysis_df(df: pd.DataFrame, subjects: pd.DataFrame, cfg, assay: str) -> pd.DataFrame:
     """Ensure all required columns exist and are properly typed."""
 
-    within = cfg.within_factors.get(assay, [])
     between = cfg.between_factors
     blocking = cfg.blocking_factors
 
-    needed = [cfg.mouse_id_col] + between + within + blocking
+    needed = [cfg.mouse_id_col] + between + blocking
     missing = [c for c in needed if c not in df.columns]
 
     if missing:
@@ -273,19 +297,18 @@ def prepare_analysis_df(df: pd.DataFrame, subjects: pd.DataFrame, cfg, assay: st
 
     require_columns(df, [cfg.mouse_id_col], f"{assay}: merged")
     require_columns(df, between, f"{assay}: between_factors")
-    require_columns(df, within, f"{assay}: within_factors")
     if blocking:
         require_columns(df, blocking, f"{assay}: blocking_factors")
 
     if cfg.group_order and "group" in df.columns:
         check_groups_in_data(df["group"], cfg.group_order, where=assay.upper())
 
-    df = coerce_categoricals(df, between + within + blocking)
+    df = coerce_categoricals(df, between + blocking)
 
     return df
 
 
-def run_primary_tests(df: pd.DataFrame, cfg, assay: str, exclusions: pd.DataFrame) -> None:
+def run_primary_tests(df: pd.DataFrame, cfg, assay: str, exclusions: pd.DataFrame, scope: str = "primary") -> None:
     """Confirmatory one-sample tests."""
     if not getattr(cfg, "primary_one_sample_enabled", False):
         return
@@ -310,7 +333,7 @@ def run_primary_tests(df: pd.DataFrame, cfg, assay: str, exclusions: pd.DataFram
             assay=assay,
             endpoint=endpoint,
             cfg=cfg,
-            analysis_scope="primary",
+            analysis_scope=scope,
         )
 
         by_group = run_one_sample_by_group(
@@ -340,7 +363,7 @@ def run_primary_tests(df: pd.DataFrame, cfg, assay: str, exclusions: pd.DataFram
         for k, v in excl_info.items():
             res[k] = v
 
-        res["analysis_scope"] = "primary"
+        res["analysis_scope"] = scope
         res["endpoint_role"] = endpoint_role(cfg, assay, endpoint)
         frames.append(res)
 
@@ -349,11 +372,11 @@ def run_primary_tests(df: pd.DataFrame, cfg, assay: str, exclusions: pd.DataFram
         return
 
     out = pd.concat(frames, ignore_index=True)
-    out_path = cfg.out_tables / f"{assay.upper()}_primary_one_sample.csv"
+    out_path = cfg.out_tables / f"{assay.upper()}_primary_one_sample{_scope_suffix(scope)}.csv"
     write_table(out, out_path, cfg)
     log_written(out_path)
 
-def run_anova(df: pd.DataFrame, cfg, assay: str, exclusions: pd.DataFrame) -> pd.DataFrame | None:
+def run_anova(df: pd.DataFrame, cfg, assay: str, exclusions: pd.DataFrame, scope: str = "primary") -> pd.DataFrame | None:
     """Two-way ANOVA + correction."""
     if not getattr(cfg, "secondary_two_way_anova_enabled", False):
         return None
@@ -362,17 +385,8 @@ def run_anova(df: pd.DataFrame, cfg, assay: str, exclusions: pd.DataFrame) -> pd
     if not endpoints:
         return None
 
-    available_endpoints = [ep for ep in endpoints if ep in df.columns]
-    missing_endpoints = [ep for ep in endpoints if ep not in df.columns]
-
-    if missing_endpoints:
-        print(
-            f"WARNING [{assay.upper()}]: skipping missing ANOVA endpoints: "
-            f"{missing_endpoints}"
-        )
-
+    available_endpoints = available_or_warn(df, endpoints, assay, "ANOVA")
     if not available_endpoints:
-        print(f"WARNING [{assay.upper()}]: no available ANOVA endpoints; skipping ANOVA.")
         return None
 
     frames = []
@@ -383,7 +397,7 @@ def run_anova(df: pd.DataFrame, cfg, assay: str, exclusions: pd.DataFrame) -> pd
             assay=assay,
             endpoint=ep,
             cfg=cfg,
-            analysis_scope="primary",
+            analysis_scope=scope,
         )
 
         res = run_two_way_anova(
@@ -398,7 +412,7 @@ def run_anova(df: pd.DataFrame, cfg, assay: str, exclusions: pd.DataFrame) -> pd
         for k, v in excl_info.items():
             res[k] = v
 
-        res["analysis_scope"] = "primary"
+        res["analysis_scope"] = scope
         res["endpoint_role"] = endpoint_role(cfg, assay, ep)
         frames.append(res)
 
@@ -415,30 +429,21 @@ def run_anova(df: pd.DataFrame, cfg, assay: str, exclusions: pd.DataFrame) -> pd
 
     aov["significance_label"] = aov["p_adj"].apply(_significance_label)
 
-    out_path = cfg.out_tables / f"{assay.upper()}_secondary_two_way_anova.csv"
+    out_path = cfg.out_tables / f"{assay.upper()}_secondary_two_way_anova{_scope_suffix(scope)}.csv"
     write_table(aov, out_path, cfg)
     log_written(out_path)
 
     return aov
 
 
-def run_posthoc(df: pd.DataFrame, cfg, assay: str, exclusions: pd.DataFrame,) -> None:
+def run_posthoc(df: pd.DataFrame, cfg, assay: str, exclusions: pd.DataFrame, scope: str = "primary") -> None:
     posthoc_cfg = getattr(cfg, "secondary_two_way_anova_posthoc", {}) or {}
     if not posthoc_cfg or not posthoc_cfg.get("enabled", True):
         return
 
     endpoints = cfg.secondary_two_way_anova_endpoints.get(assay, [])
-    available_endpoints = [ep for ep in endpoints if ep in df.columns]
-    missing_endpoints = [ep for ep in endpoints if ep not in df.columns]
-
-    if missing_endpoints:
-        print(
-            f"WARNING [{assay.upper()}]: skipping missing posthoc endpoints: "
-            f"{missing_endpoints}"
-        )
-
+    available_endpoints = available_or_warn(df, endpoints, assay, "posthoc")
     if not available_endpoints:
-        print(f"WARNING [{assay.upper()}]: no available posthoc endpoints; skipping posthoc.")
         return
 
     posthoc_frames = []
@@ -450,7 +455,7 @@ def run_posthoc(df: pd.DataFrame, cfg, assay: str, exclusions: pd.DataFrame,) ->
             assay=assay,
             endpoint=ep,
             cfg=cfg,
-            analysis_scope="primary",
+            analysis_scope=scope,
         )
 
         res = run_posthoc_cellmeans_prism(
@@ -468,7 +473,7 @@ def run_posthoc(df: pd.DataFrame, cfg, assay: str, exclusions: pd.DataFrame,) ->
         for k, v in excl_info.items():
             res[k] = v
 
-        res["analysis_scope"] = "primary"
+        res["analysis_scope"] = scope
         res["endpoint_role"] = endpoint_role(cfg, assay, ep)
         posthoc_frames.append(res)
 
@@ -477,7 +482,7 @@ def run_posthoc(df: pd.DataFrame, cfg, assay: str, exclusions: pd.DataFrame,) ->
 
     df_posthoc = pd.concat(posthoc_frames, ignore_index=True)
 
-    out_path = cfg.out_tables / f"{assay.upper()}_secondary_posthoc_cellmeans.csv"
+    out_path = cfg.out_tables / f"{assay.upper()}_secondary_posthoc_cellmeans{_scope_suffix(scope)}.csv"
     write_table(df_posthoc, out_path, cfg)
     log_written(out_path)
 
@@ -495,7 +500,7 @@ def trial_durations_from_experiment(exp_cfg: dict) -> dict[str, float]:
     return out
 
 
-def run_time_to_event_stage(df: pd.DataFrame, cfg, assay: str, exclusions: pd.DataFrame) -> None:
+def run_time_to_event_stage(df: pd.DataFrame, cfg, assay: str, exclusions: pd.DataFrame, scope: str = "primary") -> None:
     """Censored latency endpoints: Cox model + log-rank, corrected across endpoints per term."""
     if not cfg.time_to_event_enabled:
         return
@@ -504,17 +509,14 @@ def run_time_to_event_stage(df: pd.DataFrame, cfg, assay: str, exclusions: pd.Da
     if not endpoints:
         return
 
-    missing_endpoints = [ep for ep in endpoints if ep not in df.columns]
-    if missing_endpoints:
-        print(f"WARNING [{assay.upper()}]: skipping missing time-to-event endpoints: {missing_endpoints}")
-    available_endpoints = [ep for ep in endpoints if ep in df.columns]
+    available_endpoints = available_or_warn(df, endpoints, assay, "time-to-event")
     if not available_endpoints:
         return
 
     test_frames, summary_frames = [], []
     for ep in available_endpoints:
         df_ep, excl_info = analysis_df_for_endpoint(
-            df, exclusions, assay=assay, endpoint=ep, cfg=cfg, analysis_scope="primary",
+            df, exclusions, assay=assay, endpoint=ep, cfg=cfg, analysis_scope=scope,
         )
         tests, summary = run_time_to_event(
             df_ep,
@@ -526,7 +528,7 @@ def run_time_to_event_stage(df: pd.DataFrame, cfg, assay: str, exclusions: pd.Da
         )
         for k, v in excl_info.items():
             tests[k] = v
-        tests["analysis_scope"] = "primary"
+        tests["analysis_scope"] = scope
         tests["endpoint_role"] = endpoint_role(cfg, assay, ep)
         test_frames.append(tests)
         summary_frames.append(summary)
@@ -539,11 +541,11 @@ def run_time_to_event_stage(df: pd.DataFrame, cfg, assay: str, exclusions: pd.Da
     out["correction_method"] = method
     out["significance_label"] = out["p_adj"].apply(_significance_label)
 
-    out_path = cfg.out_tables / f"{assay.upper()}_time_to_event.csv"
+    out_path = cfg.out_tables / f"{assay.upper()}_time_to_event{_scope_suffix(scope)}.csv"
     write_table(out, out_path, cfg)
     log_written(out_path)
 
-    summary_path = cfg.out_tables / f"{assay.upper()}_time_to_event_summary.csv"
+    summary_path = cfg.out_tables / f"{assay.upper()}_time_to_event_summary{_scope_suffix(scope)}.csv"
     write_table(pd.concat(summary_frames, ignore_index=True), summary_path, cfg)
     log_written(summary_path)
 
@@ -687,17 +689,8 @@ def run_diagnostics(df: pd.DataFrame, cfg, assay: str, exclusions: pd.DataFrame)
     if not endpoints:
         return
 
-    available_endpoints = [ep for ep in endpoints if ep in df.columns]
-    missing_endpoints = [ep for ep in endpoints if ep not in df.columns]
-
-    if missing_endpoints:
-        print(
-            f"WARNING [{assay.upper()}]: skipping missing diagnostic endpoints: "
-            f"{missing_endpoints}"
-        )
-
+    available_endpoints = available_or_warn(df, endpoints, assay, "diagnostic")
     if not available_endpoints:
-        print(f"WARNING [{assay.upper()}]: no available diagnostic endpoints; skipping diagnostics.")
         return
 
     df = mask_excluded_values(df, exclusions, assay=assay, columns=available_endpoints, cfg=cfg)
@@ -724,8 +717,8 @@ def run_diagnostics(df: pd.DataFrame, cfg, assay: str, exclusions: pd.DataFrame)
             endpoints=available_endpoints,
             group_cols=grouping,
             id_col=cfg.mouse_id_col,
-            q=0.01,
-            min_n=6,
+            q=cfg.diagnostics_rout_q,
+            min_n=cfg.diagnostics_rout_min_n,
         )
 
         write_table(rout_df, cfg.out_tables / f"{assay.upper()}_flagged_points_rout_by_{suffix}.csv", cfg)
@@ -882,6 +875,7 @@ def write_summary(
 # -------------------------
 
 def main() -> None:
+    require_repo_root(Path(__file__).resolve().parents[1])
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", required=True)
     ap.add_argument("--experiment-config", default="", help="Path to experiment YAML config")
@@ -895,6 +889,7 @@ def main() -> None:
 
     exp_cfg = load_yaml(args.experiment_config)
     cfg = load_stats_config(args.config, exp_cfg)
+    experiment_paths(load_yaml_strict(args.config), exp_cfg, required=True)  # data and output paths must be set
 
     plan = frozen_plan_status(REPO_ROOT, args.experiment_config, exp_cfg.get("analysis_frozen_at"))
     if plan["unchanged"] is False:
@@ -909,34 +904,20 @@ def main() -> None:
     )
     exclusions = load_exclusions(exclusions_path)
 
-    exp_paths = exp_cfg.get("paths", {})
-
-    cfg = replace(
-        cfg,
-        processed_dir=Path(exp_paths.get("processed_dir", cfg.processed_dir)),
-        subjects_path=Path(exp_paths.get("metadata_subjects", cfg.subjects_path)),
-        out_tables=Path(exp_paths.get("out_tables", cfg.out_tables)),
-        out_logs=Path(exp_paths.get("out_logs", cfg.out_logs)),
-        out_figures=Path(exp_paths.get("out_figures", cfg.out_figures)),
-    )
     cfg = apply_assay_instance_aliases(cfg, exp_cfg)
     cfg = replace(cfg, trial_durations_s=trial_durations_from_experiment(exp_cfg))
     assays = cfg.assays if args.assays is None else [a.lower() for a in args.assays]
 
     subjects = read_subjects(cfg.subjects_path)
 
-    base_out_tables = cfg.out_tables
-    base_out_logs = cfg.out_logs
-    base_out_figures = cfg.out_figures
-
     for assay in assays:
         assay_key = assay.upper()
 
         assay_cfg = replace(
             cfg,
-            out_tables=base_out_tables.parent / assay_key / "tables",
-            out_logs=base_out_logs.parent / assay_key / "logs",
-            out_figures=base_out_figures.parent / assay_key / "figures",
+            out_tables=cfg.out_dir / assay_key / "tables",
+            out_logs=cfg.out_dir / assay_key / "logs",
+            out_figures=cfg.out_dir / assay_key / "figures",
         )
 
         assay_cfg.out_tables.mkdir(parents=True, exist_ok=True)
@@ -966,10 +947,18 @@ def main() -> None:
         df = read_processed(assay_cfg.processed_dir, assay)
         df = prepare_analysis_df(df, subjects, assay_cfg, assay)
 
-        run_primary_tests(df, assay_cfg, assay,exclusions)
+        run_primary_tests(df, assay_cfg, assay, exclusions)
         run_anova(df, assay_cfg, assay, exclusions)
         run_posthoc(df, assay_cfg, assay, exclusions)
         run_time_to_event_stage(df, assay_cfg, assay, exclusions)
+
+        # Sensitivity analysis: same tests with the sensitivity exclusion set, when it differs
+        if scopes_differ(exclusions, assay):
+            print(f"[{assay_key}] exclusions differ between primary and sensitivity: running sensitivity analysis")
+            run_primary_tests(df, assay_cfg, assay, exclusions, scope="sensitivity")
+            run_anova(df, assay_cfg, assay, exclusions, scope="sensitivity")
+            run_posthoc(df, assay_cfg, assay, exclusions, scope="sensitivity")
+            run_time_to_event_stage(df, assay_cfg, assay, exclusions, scope="sensitivity")
         run_diagnostics(df, assay_cfg, assay, exclusions)
         run_exploratory(df, assay_cfg, assay, exclusions)
 
@@ -979,7 +968,7 @@ def main() -> None:
 
     run_linear_models_stage(
         cfg, subjects, exclusions, assays=assays, args=args, exclusions_path=exclusions_path,
-        out_root=base_out_tables.parent, plan=plan,
+        out_root=cfg.out_dir, plan=plan,
     )
 
 

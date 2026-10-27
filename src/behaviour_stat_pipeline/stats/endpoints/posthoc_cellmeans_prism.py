@@ -40,20 +40,8 @@ def _q(name: str) -> str:
     return f'Q("{name}")'
 
 
-def _significance_label(p: float) -> str:
-    """Prism-like threshold labels based on adjusted p-value."""
-    if not np.isfinite(p):
-        return ""
-    if p < 1e-4:
-        return "<0.0001"
-    elif p < 1e-3:
-        return "<0.001"
-    elif p < 1e-2:
-        return "<0.01"
-    elif p < 5e-2:
-        return "<0.05"
-    else:
-        return "ns"
+# Prism-like threshold labels; single definition in stats/corrections.py
+from behaviour_stat_pipeline.stats.corrections import significance_label as _significance_label
 
 
 def _infer_levels(s: pd.Series, *, order: Optional[List[str]] = None) -> List[str]:

@@ -24,3 +24,19 @@ def adjust_pvalues(pvals: pd.Series, method: str) -> pd.Series:
     adj = multipletests(p[mask].to_numpy(), method=method.lower())[1]
     out.loc[mask] = adj
     return out
+
+
+def significance_label(p: float) -> str:
+    """Prism-like threshold labels based on an (adjusted) p-value."""
+    if p is None or not np.isfinite(p):
+        return ""
+    if p < 1e-4:
+        return "<0.0001"
+    elif p < 1e-3:
+        return "<0.001"
+    elif p < 1e-2:
+        return "<0.01"
+    elif p < 5e-2:
+        return "<0.05"
+    else:
+        return "ns"

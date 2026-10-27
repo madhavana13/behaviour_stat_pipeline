@@ -10,7 +10,7 @@ import argparse
 import yaml
 from scipy.stats import binomtest
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = PROJECT_ROOT / "data" / "experiments"
 
 ID_COLUMNS = {
@@ -276,7 +276,7 @@ def compute_variability_summary(
     return pd.DataFrame(results)
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 def run_sign_test_variability(
     df: pd.DataFrame,
@@ -516,8 +516,8 @@ def process_experiment(
         print(f"[SKIP] No processed files found for {experiment_id}")
         return
 
-    output_tables = PROJECT_ROOT / "outputs" / experiment_id / "tables"
-    output_logs = PROJECT_ROOT / "outputs" / experiment_id / "logs"
+    output_tables = PROJECT_ROOT / "outputs" / experiment_id / "exploratory" / "tables"
+    output_logs = PROJECT_ROOT / "outputs" / experiment_id / "exploratory" / "logs"
     output_tables.mkdir(parents=True, exist_ok=True)
     output_logs.mkdir(parents=True, exist_ok=True)
 

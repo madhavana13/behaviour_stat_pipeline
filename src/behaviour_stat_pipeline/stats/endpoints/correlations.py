@@ -60,7 +60,8 @@ def _group_iterator(df: pd.DataFrame, group_cols: List[str]):
         key_str = ";".join([f"{c}={v}" for c, v in zip(group_cols, key)])
         yield (key_str, sub)
 
-def _resolve_corr_specs(cfg: dict, assay: str) -> list[dict]:
+def resolve_corr_specs(cfg: dict, assay: str) -> list[dict]:
+    """Correlation specs with defaults applied; used by both the statistics and the figures."""
     corr = cfg.get("correlations", {}) or {}
     defaults = corr.get("defaults", {}) or {}
     default_groupings = corr.get("default_groupings", [[]]) or [[]]
@@ -183,7 +184,7 @@ def run_correlations(
     if not c.get("enabled", False):
         return pd.DataFrame()
 
-    specs = _resolve_corr_specs(cfg, assay)
+    specs = resolve_corr_specs(cfg, assay)
     if not isinstance(specs, list):
         raise ValueError("correlations.specs must be a list")
 

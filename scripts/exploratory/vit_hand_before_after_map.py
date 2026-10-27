@@ -88,8 +88,9 @@ def main() -> None:
     exp_paths = exp_cfg.get("paths", {})
 
     processed_dir = Path(exp_paths["processed_dir"])
-    out_figures = Path(exp_paths["out_figures"])
-    out_tables = Path(exp_paths["out_tables"])
+    # exploratory output is kept apart from pipeline results
+    out_figures = Path(exp_paths["out_dir"]) / "exploratory" / "figures"
+    out_tables = Path(exp_paths["out_dir"]) / "exploratory" / "tables"
 
     assay = args.assay.lower()
     assay_prefix = assay.upper()

@@ -87,7 +87,6 @@ def derive_lm_metrics(df: pd.DataFrame, cfg: LMConfig | None = None) -> pd.DataF
     )
 
 
-    out["is_after"] = (out["timepoint"].astype(str).str.lower() == "after").astype(int)
 
     # Contract invariant
     assert_unique_key(out, ["mouse_id", "timepoint"], where="LM processed")

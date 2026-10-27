@@ -43,11 +43,14 @@ def load_yaml_strict(path: str | Path) -> dict:
 # option and must fail, not fall back to a default.
 _ALLOWED_KEYS = {
     "primary_one_sample": {
-        "enabled", "group_col", "collapse_over", "correction", "run_ttest", "run_wilcoxon", "nulls",
+        "enabled", "group_col", "correction", "run_ttest", "run_wilcoxon", "nulls",
     },
     "diagnostics": {
         "enabled", "groupings", "endpoints", "min_n_test", "var_ratio_thresh", "mad_z_thresh",
+        "rout_q", "rout_min_n",
     },
+    "design": {"between_factors"},
+    "optional": {"blocking_factors"},
     "secondary_two_way_anova": {
         "enabled", "type", "include_interaction", "factors", "correction_across_endpoints",
         "factor_orders", "endpoints", "posthoc",
@@ -59,6 +62,14 @@ _ALLOWED_KEYS = {
     "correlations.spec": {
         "assay", "x", "y", "name", "method", "groupings", "filter", "covariates", "se", "cluster_col",
     },
+}
+
+# Top-level sections of the merged stats config (stats.yaml + experiment analysis block).
+# subjects / factors / paths / misc are read by ingestion and figures.
+_TOP_LEVEL_KEYS = {
+    "id_cols", "paths", "subjects", "factors", "design", "optional", "assays", "primary_endpoints",
+    "primary_one_sample", "diagnostics", "secondary_two_way_anova", "time_to_event", "linear_models",
+    "correlations", "misc",
 }
 
 _MULTITEST_METHODS = {"none", "bonferroni", "holm", "sidak", "fdr_bh", "fdr_by"}
@@ -131,6 +142,10 @@ def validate_stats_config(cfg: dict) -> None:
     """
     errors: list[str] = []
 
+    unknown_top = sorted(set(cfg) - _TOP_LEVEL_KEYS)
+    if unknown_top:
+        errors.append(f"unknown top-level keys {unknown_top}; allowed: {sorted(_TOP_LEVEL_KEYS)}")
+
     def check_keys(section: dict, allowed_key: str, where: str) -> None:
         if not isinstance(section, dict):
             errors.append(f"{where}: expected a mapping, got {type(section).__name__}")
@@ -157,6 +172,8 @@ def validate_stats_config(cfg: dict) -> None:
 
     diag = cfg.get("diagnostics", {}) or {}
     check_keys(diag, "diagnostics", "diagnostics")
+    check_keys(cfg.get("design", {}) or {}, "design", "design")
+    check_keys(cfg.get("optional", {}) or {}, "optional", "optional")
     check_endpoint_lists(diag.get("endpoints"), "diagnostics.endpoints")
 
     sec = cfg.get("secondary_two_way_anova", {}) or {}
@@ -251,14 +268,12 @@ class StatsConfig:
     out_tables: Path
     out_figures: Path
     out_logs: Path
+    out_dir: Path
     between_factors: List[str]
-    within_factors: Dict[str, List[str]]
     blocking_factors: List[str]
-    cluster_col: str
     assays: List[str]
     primary_one_sample_enabled: bool
     primary_one_sample_group_col: str
-    primary_one_sample_collapse_over: list[str]
     primary_one_sample_correction: str
     primary_one_sample_run_ttest: bool
     primary_one_sample_run_wilcoxon: bool
@@ -269,6 +284,8 @@ class StatsConfig:
     diagnostics_min_n_test: int
     diagnostics_var_ratio_thresh: float
     diagnostics_mad_z_thresh: float
+    diagnostics_rout_q: float
+    diagnostics_rout_min_n: int
     secondary_two_way_anova_enabled: bool
     secondary_two_way_anova_factors: list[str]
     secondary_two_way_anova_include_interaction: bool
@@ -352,13 +369,13 @@ def load_stats_config(path: str | Path, experiment_config: Optional[dict] = None
     if plan_errors:
         raise ConfigError("Invalid analysis plan:\n  - " + "\n  - ".join(plan_errors))
 
-    mouse_id_col = cfg["id_cols"]["mouse"]
-    paths = cfg["paths"]
+    mouse_id_col = MOUSE_ID_COL
+    paths = experiment_paths(cfg, experiment_config)
     processed_dir = Path(paths["processed_dir"])
     subjects_path = Path(paths["metadata_subjects"])
-    out_tables = Path(paths["out_tables"])
-    out_figures = Path(paths["out_figures"])
-    out_logs = Path(paths["out_logs"])
+    out_dir = Path(paths["out_dir"])
+    # Per-assay folders (<out_dir>/<ASSAY>/...) are set by the runner
+    out_tables = out_figures = out_logs = out_dir
     diag = cfg.get("diagnostics", {})
     diagnostics_enabled = bool(diag.get("enabled", False))
     diagnostics_groupings = list(diag.get("groupings", []))
@@ -366,10 +383,11 @@ def load_stats_config(path: str | Path, experiment_config: Optional[dict] = None
     diagnostics_min_n_test = int(diag.get("min_n_test", 3))
     diagnostics_var_ratio_thresh = float(diag.get("var_ratio_thresh", 4.0))
     diagnostics_mad_z_thresh = float(diag.get("mad_z_thresh", 3.5))
+    diagnostics_rout_q = float(diag.get("rout_q", 0.01))
+    diagnostics_rout_min_n = int(diag.get("rout_min_n", 6))
     pos = cfg.get("primary_one_sample", {})
     primary_one_sample_enabled = bool(pos.get("enabled", False))
     primary_one_sample_group_col = str(pos.get("group_col", "group"))
-    primary_one_sample_collapse_over = list(pos.get("collapse_over", []))
     primary_one_sample_correction = str(pos.get("correction", "holm"))
     primary_one_sample_run_ttest = bool(pos.get("run_ttest", True))
     primary_one_sample_run_wilcoxon = bool(pos.get("run_wilcoxon", True))
@@ -389,11 +407,9 @@ def load_stats_config(path: str | Path, experiment_config: Optional[dict] = None
 
     design = cfg["design"]
     between_factors = list(design.get("between_factors", []))
-    within_factors = dict(design.get("within_factors", {}))
 
     optional = cfg.get("optional", {})
     blocking_factors = list(optional.get("blocking_factors", []))
-    cluster_col = optional.get("cluster_col", mouse_id_col)
 
     assays = list(cfg.get("assays", []))
     corr = cfg.get("correlations", {})
@@ -424,10 +440,9 @@ def load_stats_config(path: str | Path, experiment_config: Optional[dict] = None
         out_tables=out_tables,
         out_figures=out_figures,
         out_logs=out_logs,
+        out_dir=out_dir,
         between_factors=between_factors,
-        within_factors=within_factors,
         blocking_factors=blocking_factors,
-        cluster_col=cluster_col,
         assays=assays, 
         diagnostics_enabled=diagnostics_enabled,
         diagnostics_groupings=diagnostics_groupings,
@@ -435,9 +450,10 @@ def load_stats_config(path: str | Path, experiment_config: Optional[dict] = None
         diagnostics_min_n_test=diagnostics_min_n_test,
         diagnostics_var_ratio_thresh=diagnostics_var_ratio_thresh,
         diagnostics_mad_z_thresh=diagnostics_mad_z_thresh,
+        diagnostics_rout_q=diagnostics_rout_q,
+        diagnostics_rout_min_n=diagnostics_rout_min_n,
         primary_one_sample_enabled=primary_one_sample_enabled,
         primary_one_sample_group_col=primary_one_sample_group_col,
-        primary_one_sample_collapse_over=primary_one_sample_collapse_over,
         primary_one_sample_correction=primary_one_sample_correction,
         primary_one_sample_run_ttest=primary_one_sample_run_ttest,
         primary_one_sample_run_wilcoxon=primary_one_sample_run_wilcoxon,
@@ -529,6 +545,45 @@ def check_groups_in_data(values, order: list[str], where: str) -> None:
             f"{where}: groups {undeclared} are in the data but not in groups.order {order} "
             f"(experiment config). Add them, or check subjects.csv."
         )
+
+
+def require_repo_root(repo_root: Path) -> None:
+    """Config paths (data/, outputs/, configs/) are relative to the repository root."""
+    if Path.cwd().resolve() != Path(repo_root).resolve():
+        raise SystemExit(
+            f"Run this from the repository root ({Path(repo_root).resolve()}); paths in the configs are "
+            f"relative to it. Current directory: {Path.cwd().resolve()}"
+        )
+
+
+# Ingestion always produces this column; it is not configurable
+MOUSE_ID_COL = "mouse_id"
+
+_LEGACY_OUTPUT_KEYS = ("out_tables", "out_figures", "out_logs")
+
+
+def experiment_paths(cfg: dict, experiment_config: Optional[dict], required: bool = False) -> dict:
+    """
+    Data and output paths from the experiment config (stats.yaml paths only hold shared files such
+    as labels_csv). Required: processed_dir, metadata_subjects, out_dir.
+    """
+    id_cols = cfg.get("id_cols") or {}
+    if id_cols and id_cols.get("mouse", MOUSE_ID_COL) != MOUSE_ID_COL:
+        raise ConfigError(f"id_cols.mouse must be '{MOUSE_ID_COL}' (the column ingestion produces)")
+    exp_paths = ((experiment_config or {}).get("paths") or {})
+    paths = {**(cfg.get("paths") or {}), **exp_paths}
+    legacy = [k for k in _LEGACY_OUTPUT_KEYS if k in paths]
+    if legacy:
+        raise ConfigError(
+            f"paths {legacy} are replaced by paths.out_dir (e.g. outputs/EXP-2026-002); results go to "
+            f"<out_dir>/<ASSAY>/tables, figures and logs"
+        )
+    missing = [k for k in ("processed_dir", "metadata_subjects", "out_dir") if not paths.get(k)]
+    if missing and required:
+        raise ConfigError(f"experiment config paths missing {missing}")
+    for k in ("processed_dir", "metadata_subjects", "out_dir"):
+        paths.setdefault(k, "")
+    return paths
 
 
 def read_timeline(experiment_config: Optional[dict]) -> tuple[dict[str, int], dict[str, float], list[str]]:

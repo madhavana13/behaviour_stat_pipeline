@@ -79,6 +79,8 @@ class RunContext:
     session: str = ""
     # assay_instances.<NAME> from the experiment config (patterns, objects, filename tokens, ...)
     instance_cfg: dict = field(default_factory=dict)
+    # experiment groups.order: every group in subjects.csv must be one of these
+    allowed_groups: tuple = ()
 
 
 class BaseAssayRunner:
@@ -94,6 +96,9 @@ class BaseAssayRunner:
 
     def load_subjects_df(self, ctx: RunContext) -> pd.DataFrame:
         allowed_groups, strict_groups, allowed_sex, strict_sex = subjects_validation_from_cfg(ctx.cfg)
+        if ctx.allowed_groups:
+            # The experiment's declared groups are the allow-list (subjects are normalised to lower case)
+            allowed_groups, strict_groups = {str(g).lower() for g in ctx.allowed_groups}, True
         return load_subjects(
             ctx.subjects_path,
             allowed_groups=allowed_groups,

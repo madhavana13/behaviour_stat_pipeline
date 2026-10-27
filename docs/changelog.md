@@ -248,3 +248,46 @@ Checkpoint – Group order, labels and colours declared once per experiment
   count, supported and unsupported) were then ADDED to its OFT ANOVA and diagnostics (labels added to
   labels.csv). This changes EXP-2025-001 OFT results: 4 new endpoints, and the Holm family per term
   grows from 4 to 8 endpoints, so p_adj of the existing OFT endpoints increases.
+
+2026-10-27 (g)
+Checkpoint - Remaining hardcoded / dead / cumbersome parts
+
+### Changed
+- Output layout: experiment configs set `paths.out_dir`; results go to `<out_dir>/<ASSAY>/{tables,figures,logs}`
+  and `<out_dir>/MODELS`, exploratory scripts to `<out_dir>/exploratory`. `out_tables/out_figures/out_logs`
+  (not used as written: the code wrote to their parent folder) are now an error.
+- Smoke tests write to a temporary directory; tests no longer overwrite `outputs/`.
+- `is_after` removed from OFT/EPM/LM processed files (always 0; session order is declared in the
+  experiment config). VIT keeps it (Before/After phases).
+- Removed settings that had no effect: `primary_one_sample.collapse_over`, `optional.cluster_col`,
+  `design.within_factors`, `subjects.groups` (ingestion now checks subjects against `groups.order`),
+  `misc.raw_file` (MISC raw path comes from the experiment config), `id_cols` (the id column is always
+  `mouse_id`; any other value is an error). Unknown top-level keys in the merged config are errors.
+- ROUT thresholds configurable (`diagnostics.rout_q`, `rout_min_n`); all diagnostics thresholds written
+  out in stats.yaml.
+- `run_figures.py` defaults to the experiment's `analysis.assays`.
+- Scripts must be run from the repository root (clear error otherwise); schema aliases are found
+  relative to the repository.
+
+### Added
+- Sensitivity analysis: when `exclude_from: primary/sensitivity` rows make the two exclusion sets differ
+  for an assay, one-sample, ANOVA, posthoc and time-to-event are re-run and written as `*_sensitivity.csv`.
+
+### Removed / moved
+- Dead modules: stats/endpoints/{epm,oft,vit}_endpoints.py (empty), simple_effects.py, nor_endpoints.py,
+  stats/report.py, figures/cellmeans.py.
+- One-off analyses moved to scripts/exploratory/, superseded ingestion scripts to scripts/legacy/.
+
+### Internal
+- One significance-label function; one helper for missing-endpoint warnings; one correlation-spec
+  resolver shared by stats and figures; PlotStyle built by one generic override (two ~45-line
+  field-by-field copies removed).
+
+### Verified
+- All 121 stats tables and all 158 figures byte-identical before/after; processed files identical
+  except the removed `is_after` column.
+
+### Not done
+- Figures still read the configuration as a plain dict while the statistics use the typed StatsConfig
+  (two representations). Correlation specs and group settings are shared now; a single typed config
+  is a larger refactor.

@@ -6,6 +6,9 @@ from typing import Optional, Union
 
 import pandas as pd
 
+# Repository root (src/behaviour_stat_pipeline/io.py -> repo); configs are found relative to it
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
 from behaviour_stat_pipeline.common.schema import load_schema_aliases, normalize_headers
 
 
@@ -81,7 +84,7 @@ def load_tracking_csv(
     raw_id_col: str = "Unnamed: 0",
     *,
     assay: str | None = None,
-    schema_path: Union[str, Path] = "configs/schema_aliases.yaml",
+    schema_path: Union[str, Path] = REPO_ROOT / "configs" / "schema_aliases.yaml",
 ) -> pd.DataFrame:
     """
     Load a tracking summary CSV, normalize vendor headers, and construct canonical identifiers.

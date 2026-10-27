@@ -16,10 +16,10 @@ class PlotStyle:
     group_labels: Dict[str, str] = field(default_factory=dict)
 
     # box aesthetics
-    box_linewidth: float = 2.0
-    median_linewidth: float = 2.0
-    whisker_linewidth: float = 2.0
-    cap_linewidth: float = 2.0
+    box_linewidth: float = 1.1
+    median_linewidth: float = 1.1
+    whisker_linewidth: float = 1.0
+    cap_linewidth: float = 1.0
     box_width: float = 0.45
     x_gap: float = 0.8
 

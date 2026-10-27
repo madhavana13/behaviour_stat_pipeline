@@ -11,9 +11,7 @@ paths:
   exclusions: data/experiments/EXP-2026-002/metadata/exclusions.csv
   processed_dir: data/experiments/EXP-2026-002/processed
 
-  out_figures: outputs/EXP-2026-002/figures
-  out_tables: outputs/EXP-2026-002/tables
-  out_logs: outputs/EXP-2026-002/logs
+  out_dir: outputs/EXP-2026-002        # results: <out_dir>/<ASSAY>/{tables,figures,logs}, <out_dir>/MODELS
   
 raw:
   vit: data/experiments/EXP-2026-002/raw/vit

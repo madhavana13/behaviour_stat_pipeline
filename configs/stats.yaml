@@ -1,12 +1,6 @@
-id_cols:
-  mouse: mouse_id
-
+# Data and output paths are per experiment (configs/experiments/<EXP>.yaml -> paths:
+# processed_dir, metadata_subjects, exclusions, out_dir). The mouse id column is always mouse_id.
 paths:
-  processed_dir: data/processed
-  metadata_subjects: data/metadata/subjects.csv
-  out_tables: outputs/tables
-  out_figures: outputs/figures
-  out_logs: outputs/logs
   labels_csv: "configs/labels.csv"
 
 subjects:
@@ -14,10 +8,7 @@ subjects:
     group: lower_strip
     sex: lower_strip
 
-  groups:
-    enabled: False          # if false/omitted → accept any group labels
-    allowed: ["one", "two", "control", "stressed", "tail", "cup", "IFS"]
-    strict: true           # if true → error; if false → warn
+  # allowed group values: the experiment's groups.order (checked at ingestion)
 
   sex:
     allowed: ["male", "female"]
@@ -32,19 +23,10 @@ factors:
 design:
   # These are COLUMN NAMES, not levels. Levels can be cup/tail OR stress/control etc.
   between_factors: [group, sex]
-
-  within_factors:
-    vit: []
-    oft: []
-    spl: []
-    epm: []
-    nor: []
-    lm: []
-    misc: []
+  # repeated measures (sessions): linear_models with stack_as + random effects
 
 optional:
-  blocking_factors: []         # e.g., [cohort, batch] later
-  cluster_col: mouse_id        # repeated measures clustering key
+  blocking_factors: []         # e.g., [cohort, batch]; usable as factors in linear_models
 
 # assays, endpoints, models and correlation specs are set per experiment:
 # configs/experiments/<EXP>.yaml -> analysis:. This file holds method defaults.
@@ -54,9 +36,6 @@ primary_one_sample:
 
   # which columns define "groups" to test within (sex collapsed by default)
   group_col: group
-
-  # columns to collapse over (kept in data, but not used to split tests)
-  collapse_over: [sex]
 
   # correction scope: adjust across groups within each endpoint
   correction: holm
@@ -69,6 +48,11 @@ primary_one_sample:
 
 diagnostics:
   enabled: true
+  min_n_test: 3            # min n per cell for the Brown-Forsythe test
+  var_ratio_thresh: 4.0    # flag unequal variances above this max/min variance ratio
+  mad_z_thresh: 3.5        # flag points with |modified z| above this (flags only)
+  rout_q: 0.01             # ROUT-like outlier flagging: FDR level
+  rout_min_n: 6            # ROUT-like flagging only for cells with at least this n
   groupings:
     - [group]
     - [group, sex]
@@ -163,7 +147,7 @@ correlations:
 
 
 misc:
-  raw_file: data/experiments/EXP-2026-002/metadata/misc_raw.csv
+  # raw file: experiment config assay_instances.MISC.raw_path (or raw.misc)
 
   masks:
     - when: flag_rct

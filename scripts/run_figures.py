@@ -8,7 +8,14 @@ import yaml
 
 from behaviour_stat_pipeline.figures.runner import run_figures_from_config
 from behaviour_stat_pipeline.common.exclusions import load_exclusions
-from behaviour_stat_pipeline.stats.common import ConfigError, read_groups, resolve_config
+from behaviour_stat_pipeline.stats.common import (
+    MOUSE_ID_COL,
+    ConfigError,
+    experiment_paths,
+    read_groups,
+    require_repo_root,
+    resolve_config,
+)
 
 
 def load_yaml(path: str | Path) -> dict[str, Any]:
@@ -101,6 +108,7 @@ def merge_stats_and_figures_config(
 
 
 def main() -> None:
+    require_repo_root(Path(__file__).resolve().parents[1])
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", required=True, help="Path to stats YAML config")
     ap.add_argument(
@@ -112,7 +120,8 @@ def main() -> None:
         ),
     )
     ap.add_argument("--experiment-config", default="", help="Path to experiment YAML config")
-    ap.add_argument("--assays", nargs="+", required=True, help="Assays to run figures for, e.g. nor oft2")
+    ap.add_argument("--assays", nargs="*", default=None,
+                    help="Assays to run figures for, e.g. nor oft2 (default: analysis.assays of the experiment)")
     args = ap.parse_args()
 
     stats_config_path = Path(args.config)
@@ -143,18 +152,10 @@ def main() -> None:
     )
     exclusions = load_exclusions(exclusions_path)
 
-    paths = cfg.get("paths", {}) or {}
-
-    processed_dir = Path(
-        exp_paths.get("processed_dir", paths.get("processed_dir", "data/processed"))
-    )
-
-    out_figures = Path(
-        exp_paths.get("out_figures", paths.get("out_figures", "outputs/figures"))
-    )
-
-    id_cols = cfg.get("id_cols", {}) or {}
-    mouse_id_col = id_cols.get("mouse", "mouse_id")
+    paths = experiment_paths(cfg, exp_cfg, required=True)
+    processed_dir = Path(paths["processed_dir"])
+    out_dir = Path(paths["out_dir"])
+    mouse_id_col = MOUSE_ID_COL
 
     factors_cfg = cfg.get("factors", {}) or {}
     group_col = (factors_cfg.get("group", {}) or {}).get("column", "group")
@@ -162,12 +163,14 @@ def main() -> None:
 
     written_all = []
 
-    for requested_assay in args.assays:
+    assays = args.assays if args.assays else list(cfg.get("assays", []) or [])
+    if not assays:
+        raise SystemExit("No assays: pass --assays or set analysis.assays in the experiment config.")
+
+    for requested_assay in assays:
         assay_instance, assay_type = resolve_assay_identity(requested_assay, exp_cfg)
 
-        instance_out_figures = (
-            out_figures.parent / assay_instance.upper() / "figures"
-        )
+        instance_out_figures = out_dir / assay_instance.upper() / "figures"
         instance_out_figures.mkdir(parents=True, exist_ok=True)
 
         instance_cfg = (exp_cfg.get("assay_instances", {}) or {}).get(assay_instance.upper(), {}) or {}

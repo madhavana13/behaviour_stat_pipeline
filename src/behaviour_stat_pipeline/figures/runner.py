@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from dataclasses import fields, replace
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -10,6 +11,7 @@ from .boxpoints import plot_group_boxpoints
 from .common import PlotStyle, require_columns
 from .km import plot_km
 from .scatter import plot_group_scatter
+from behaviour_stat_pipeline.stats.endpoints.correlations import resolve_corr_specs
 from behaviour_stat_pipeline.common.exclusions import apply_exclusions_for_endpoint
 from behaviour_stat_pipeline.stats.common import check_groups_in_data
 from behaviour_stat_pipeline.stats.endpoints.time_to_event import build_survival_data
@@ -220,41 +222,6 @@ def _write_figure_log(log_path: Path, records: list[dict]) -> None:
 
     log_path.write_text("\n".join(lines), encoding="utf-8")
 
-def _resolve_corr_specs_for_figures(cfg: Dict[str, Any], assay: str) -> List[Dict[str, Any]]:
-    corr = (cfg.get("correlations", {}) or {})
-    defaults = (corr.get("defaults", {}) or {})
-    default_groupings = (corr.get("default_groupings", [[]]) or [[]])
-
-    specs_raw = corr.get("specs", []) or []
-    if not isinstance(specs_raw, list):
-        raise TypeError("correlations.specs must be a list")
-
-    resolved: List[Dict[str, Any]] = []
-    for i, s in enumerate(specs_raw):
-        if not isinstance(s, dict):
-            raise TypeError(f"correlations.specs[{i}] must be a dict")
-
-        out = dict(defaults)
-        out.update(s)
-
-        out.setdefault("assay", assay.lower())
-        out.setdefault("method", "spearman")
-
-        if out.get("groupings", None) is None:
-            out["groupings"] = default_groupings
-
-        if not out.get("name"):
-            out["name"] = f"{assay.lower()}_{_slug(out['x'])}_vs_{_slug(out['y'])}"
-
-        for k in ["name", "assay", "x", "y"]:
-            if k not in out:
-                raise ValueError(f"Resolved correlations spec missing key '{k}'")
-
-        resolved.append(out)
-
-    return resolved
-
-
 def _auto_scatter_specs_from_correlations(
     *,
     config: Dict[str, Any],
@@ -270,7 +237,7 @@ def _auto_scatter_specs_from_correlations(
     fit_enabled = bool(auto.get("fit_enabled", True))
     exclude = set([str(x) for x in (auto.get("exclude", []) or [])])
 
-    corr_specs = _resolve_corr_specs_for_figures(config, assay)
+    corr_specs = resolve_corr_specs(config, assay)  # same resolution as the statistics
     out_specs: List[Dict[str, Any]] = []
 
     for cs in corr_specs:
@@ -353,6 +320,32 @@ def _auto_km_specs_from_time_to_event(
     return out_specs
 
 
+_STYLE_FIXED = {"group_edgecolors", "group_labels", "sex_markers"}  # set from the experiment / defaults only
+
+
+def style_with_overrides(base: PlotStyle, overrides: Dict[str, Any]) -> PlotStyle:
+    """
+    Copy of `base` with every PlotStyle field present in `overrides` (figures.yaml defaults or a
+    figure spec) replaced, converted to the type of the base value. Other keys are ignored here.
+    """
+    changes = {}
+    for f in fields(PlotStyle):
+        if f.name in _STYLE_FIXED or f.name not in overrides or overrides[f.name] is None:
+            continue
+        current, value = getattr(base, f.name), overrides[f.name]
+        if isinstance(current, tuple):
+            changes[f.name] = tuple(float(v) for v in value)
+        elif isinstance(current, bool):
+            changes[f.name] = bool(value)
+        elif isinstance(current, int):
+            changes[f.name] = int(value)
+        elif isinstance(current, float):
+            changes[f.name] = float(value)
+        else:
+            changes[f.name] = str(value)
+    return replace(base, **changes)
+
+
 def run_figures_from_config(
     *,
     config: Dict[str, Any],
@@ -385,51 +378,13 @@ def run_figures_from_config(
     if not isinstance(figure_size_cfg, (list, tuple)) or len(figure_size_cfg) != 2:
         raise ValueError("figures.defaults.figure_size must be a 2-element list, e.g. [5.2, 4.2]")
 
-    style = PlotStyle(
-        group_edgecolors=dict(group_colors or {}),
-        group_labels=dict(group_labels or {}),
-        sex_markers=defaults.get("sex_markers", {}),
-        group_gap=float(defaults.get("group_gap", 0.6)),
-        box_linewidth=float(defaults.get("box_linewidth", 1.1)),
-        median_linewidth=float(defaults.get("median_linewidth", 1.1)),
-        whisker_linewidth=float(defaults.get("whisker_linewidth", 1.0)),
-        cap_linewidth=float(defaults.get("cap_linewidth", 1.0)),
-        box_width=float(defaults.get("box_width", 0.45)),
-        sex_dodge=float(defaults.get("sex_dodge", 0.06)),
-        jitter_sd=float(defaults.get("jitter_sd", 0.18)),
-        point_size=float(defaults.get("point_size", 28.0)),
-        x_gap=float(defaults.get("x_gap", 0.8)),
-        point_alpha=float(defaults.get("point_alpha", 0.9)),
-        show_point_ids=bool(defaults.get("show_point_ids", False)),
-        point_id_fontsize=float(defaults.get("point_id_fontsize", 6.0)),
-        point_id_dx=float(defaults.get("point_id_dx", 0.015)),
-        point_id_dy=float(defaults.get("point_id_dy", 0.0)),        
-        figure_size=(float(figure_size_cfg[0]), float(figure_size_cfg[1])),
-        dpi=int(defaults.get("dpi", 300)),
-        x_margin=float(defaults.get("x_margin", 0.45)),
-        title_pad=float(defaults.get("title_pad", 18.0)),
-        group_label_y=float(defaults.get("group_label_y", -0.12)),
-        ylim_top_mult=float(defaults.get("ylim_top_mult", 1.38)),
-        box_face_alpha=float(defaults.get("box_face_alpha", 0.18)),
-        transparent_background=bool(defaults.get("transparent_background", False)),
-        axis_color=str(defaults.get("axis_color", "black")),
-        text_color=str(defaults.get("text_color", "black")),
-        di_ylim=tuple(defaults.get("di_ylim", [-1.0, 1.0])),
-        di_zero_line=bool(defaults.get("di_zero_line", True)),
-        di_zero_linewidth=float(defaults.get("di_zero_linewidth", 1.0)),
-        di_zero_linestyle=str(defaults.get("di_zero_linestyle", "--")),
-        di_ticks=tuple(defaults.get("di_ticks", [-1.0, -0.5, 0.0, 0.5, 1.0])),
-        one_sample_text_position=str(defaults.get("one_sample_text_position", "top_left")),
-        one_sample_fontsize=float(defaults.get("one_sample_fontsize", 10.0)),
-        title_fontsize=float(defaults.get("title_fontsize", 10.0)),
-        axis_label_fontsize=float(defaults.get("axis_label_fontsize", 9.0)),
-        tick_label_fontsize=float(defaults.get("tick_label_fontsize", 8.0)),
-        group_label_fontsize=float(defaults.get("group_label_fontsize", 9.0)),
-        annotation_fontsize=float(defaults.get("annotation_fontsize", 9.0)),
-        bracket_fontsize=float(defaults.get("bracket_fontsize", 10.0)),
-        spine_linewidth=float(defaults.get("spine_linewidth", 1.2)),
-        tick_width=float(defaults.get("tick_width", 1.0)),
-        tick_length=float(defaults.get("tick_length", 4.0)),
+    style = style_with_overrides(
+        PlotStyle(
+            group_edgecolors=dict(group_colors or {}),
+            group_labels=dict(group_labels or {}),
+            sex_markers=defaults.get("sex_markers", {}),
+        ),
+        {**defaults, "figure_size": (float(figure_size_cfg[0]), float(figure_size_cfg[1]))},
     )
 
     formats = defaults.get("formats", ["png"])
@@ -547,53 +502,7 @@ def run_figures_from_config(
                 id_cols=id_cols,
             )
 
-            style_spec = PlotStyle(
-                group_edgecolors=style.group_edgecolors,
-                group_labels=style.group_labels,
-                sex_markers=style.sex_markers,
-                box_linewidth=style.box_linewidth,
-                median_linewidth=style.median_linewidth,
-                whisker_linewidth=style.whisker_linewidth,
-                cap_linewidth=style.cap_linewidth,
-                box_width=float(spec.get("box_width", style.box_width)),
-                point_size=float(spec.get("point_size", style.point_size)),
-                point_alpha=float(spec.get("point_alpha", style.point_alpha)),
-                jitter_sd=float(spec.get("jitter_sd", style.jitter_sd)),
-                sex_dodge=float(spec.get("sex_dodge", style.sex_dodge)),
-                x_gap=float(spec.get("x_gap", style.x_gap)),
-                show_point_ids=bool(spec.get("show_point_ids", style.show_point_ids)),
-                point_id_fontsize=float(spec.get("point_id_fontsize", style.point_id_fontsize)),
-                point_id_dx=float(spec.get("point_id_dx", style.point_id_dx)),
-                point_id_dy=float(spec.get("point_id_dy", style.point_id_dy)),
-                group_gap=float(spec.get("group_gap", style.group_gap)),
-                figure_size=tuple(spec.get("figure_size", style.figure_size)),
-                dpi=int(spec.get("dpi", style.dpi)),
-                x_margin=float(spec.get("x_margin", style.x_margin)),
-                title_pad=float(spec.get("title_pad", style.title_pad)),
-                group_label_y=float(spec.get("group_label_y", style.group_label_y)),
-                ylim_top_mult=float(spec.get("ylim_top_mult", style.ylim_top_mult)),
-                box_face_alpha=float(spec.get("box_face_alpha", style.box_face_alpha)),
-                transparent_background=bool(spec.get("transparent_background", style.transparent_background)),
-                axis_color=str(spec.get("axis_color", style.axis_color)),
-                text_color=str(spec.get("text_color", style.text_color)),
-                di_ylim=tuple(spec.get("di_ylim", style.di_ylim)),
-                di_zero_line=bool(spec.get("di_zero_line", style.di_zero_line)),
-                di_zero_linewidth=float(spec.get("di_zero_linewidth", style.di_zero_linewidth)),
-                di_zero_linestyle=str(spec.get("di_zero_linestyle", style.di_zero_linestyle)),
-                di_ticks=tuple(spec.get("di_ticks", style.di_ticks)),
-                one_sample_text_position=str(spec.get("one_sample_text_position", style.one_sample_text_position)),
-                one_sample_fontsize=float(spec.get("one_sample_fontsize", style.one_sample_fontsize)),
-                title_fontsize=float(spec.get("title_fontsize", style.title_fontsize)),
-                axis_label_fontsize=float(spec.get("axis_label_fontsize", style.axis_label_fontsize)),
-                tick_label_fontsize=float(spec.get("tick_label_fontsize", style.tick_label_fontsize)),
-                group_label_fontsize=float(spec.get("group_label_fontsize", style.group_label_fontsize)),
-                annotation_fontsize=float(spec.get("annotation_fontsize", style.annotation_fontsize)),
-                bracket_fontsize=float(spec.get("bracket_fontsize", style.bracket_fontsize)),
-                spine_linewidth=float(spec.get("spine_linewidth", style.spine_linewidth)),
-                tick_width=float(spec.get("tick_width", style.tick_width)),
-                tick_length=float(spec.get("tick_length", style.tick_length)),
-                
-            )
+            style_spec = style_with_overrides(style, spec)
 
             sig_cfg = (defaults.get("significance", {}) or {}).copy()
             sig_cfg.update(spec.get("significance", {}) or {})

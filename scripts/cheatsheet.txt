@@ -51,19 +51,22 @@ FOR RESULTS YOU WILL REPORT: commit first, then add --require-clean
 3. FIGURES: -> outputs/<EXP>/<ASSAY>/figures/   (run stats first: figures read the tables)
 =====================================================================
 
-python scripts/run_figures.py --config $cfg --experiment-config $exp --assays nor lm oft1 oft2 oft3 oft4 vit misc
+All assays in the plan:
+    python scripts/run_figures.py --config $cfg --experiment-config $exp
+Selected assays:
+    python scripts/run_figures.py --config $cfg --experiment-config $exp --assays nor lm
 python scripts/run_figures.py --config $cfg --figures-config configs/figures.yaml --experiment-config $exp --assays oft2
 
 
 =====================================================================
-4. EXTRA ANALYSES / CHECKS
+4. EXPLORATORY SCRIPTS (outside the pipeline, not validated) -> outputs/<EXP>/exploratory/
 =====================================================================
 
 Heteroscedasticity across all processed files:
-    python scripts/combine_processed_and_check_heteroscedasticity.py --experiment-config $exp
+    python scripts/exploratory/combine_processed_and_check_heteroscedasticity.py --experiment-config $exp
 
 NOR individual trajectories:
-    python scripts/nor_check_individual_change.py --experiment-config $exp
+    python scripts/exploratory/nor_check_individual_change.py --experiment-config $exp
 
 
 =====================================================================
@@ -76,9 +79,12 @@ configs/experiments/<EXP>.yaml     paths, assay instances (order, day, trial_dur
 configs/figures.yaml               figure styling and manual figure specs
 configs/labels.csv                 axis labels / titles per endpoint
 data/experiments/<EXP>/metadata/   subjects.csv, exclusions.csv
-outputs/<EXP>/<ASSAY>/tables/      result tables (every table has run_id and endpoint_role)
-outputs/<EXP>/<ASSAY>/logs/        <ASSAY>_provenance.json (commit, input hashes, versions), summaries
-outputs/<EXP>/MODELS/              linear / mixed model results
+outputs/<EXP>/  (= paths.out_dir)
+  <ASSAY>/tables/                  result tables (every table has run_id and endpoint_role);
+                                   *_sensitivity.csv when primary/sensitivity exclusions differ
+  <ASSAY>/logs/                    <ASSAY>_provenance.json (commit, input hashes, versions), summaries
+  MODELS/                          linear / mixed model results
+  exploratory/                     output of scripts/exploratory/
 docs/changelog.md                  every change that affects results
 
 
@@ -132,9 +138,7 @@ mkdir data\experiments\EXP-2026-002\raw\oft
 mkdir data\experiments\EXP-2026-002\raw\epm
 mkdir data\experiments\EXP-2026-002\raw\lm
 
-mkdir outputs\EXP-2026-002\tables
-mkdir outputs\EXP-2026-002\figures
-mkdir outputs\EXP-2026-002\logs
+(outputs\<EXP>\ is created by the pipeline; set paths.out_dir in the experiment config)
 
 Then copy an existing configs/experiments/<EXP>.yaml and edit paths, assay_instances and analysis.
 

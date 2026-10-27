@@ -53,15 +53,17 @@ data/experiments/<EXP>/
   metadata/subjects.csv         mouse_id, group, sex, cage, box ... (one row per mouse)
   metadata/exclusions.csv       which mouse is excluded from what, and why
   processed/<INSTANCE>_processed.csv
-outputs/<EXP>/
-  <ASSAY>/tables/  <ASSAY>/figures/  <ASSAY>/logs/
-  MODELS/tables/   MODELS/logs/
+outputs/<EXP>/                  = paths.out_dir of the experiment
+  <ASSAY>/tables/  <ASSAY>/figures/  <ASSAY>/logs/      pipeline results
+  MODELS/tables/   MODELS/logs/                         linear / mixed models
+  exploratory/                                          output of scripts/exploratory/ (not validated)
 src/behaviour_stat_pipeline/
   assays/        ingestion per assay type (registry.py: VIT, OFT, SPL, EPM, NOR, LM, MISC)
   common/        schema normalisation, exclusions, QC
   stats/         statistics; stats/endpoints/ one module per analysis; stats/r/ optional R backend
   figures/       box plots, scatter, Kaplan-Meier
 scripts/         command-line entry points (run_assay, run_stats, run_figures, helpers)
+  exploratory/   one-off analyses outside the pipeline (not validated); legacy/ superseded scripts
 tests/           smoke tests, reference tests against R, config tests
 ```
 
@@ -94,7 +96,7 @@ paths:
   metadata_subjects: data/experiments/EXP-2026-002/metadata/subjects.csv
   exclusions:        data/experiments/EXP-2026-002/metadata/exclusions.csv
   processed_dir:     data/experiments/EXP-2026-002/processed
-  out_tables / out_figures / out_logs: outputs/EXP-2026-002/...
+  out_dir:           outputs/EXP-2026-002   # results: <out_dir>/<ASSAY>/{tables,figures,logs}
 
 assay_instances:                     # every test that was run, by the name used everywhere else
   OFT2:
@@ -260,7 +262,14 @@ Runs, per assay instance and in this order, every analysis the plan enables; the
 
 A mouse excluded from one endpoint still counts for the others. Excluded IDs and reasons are
 written into every affected table (`n_excluded`, `excluded_mouse_ids`, `exclusion_reasons`).
-A configured exclusion file that does not exist is an error. (`sensitivity` rows are not used yet.)
+A configured exclusion file that does not exist is an error.
+
+**Sensitivity analysis.** The primary analysis drops rows marked `primary` or `all`; the
+sensitivity analysis drops rows marked `sensitivity` or `all`. When the two sets differ for an
+assay, one-sample, ANOVA, posthoc and time-to-event are run again and written next to the primary
+tables as `<table>_sensitivity.csv` (column `analysis_scope`). Typical use: a post-hoc exclusion
+(e.g. aberrant behaviour) marked `exclude_from: primary`, so results are reported without and with
+the animal.
 
 ### 6.2 Analyses and their outputs
 
@@ -412,6 +421,9 @@ change to the statistics. Tests that need R are skipped without it.
 | `also listed in secondary_two_way_anova.endpoints` | a censored latency cannot also go through ANOVA |
 | `linear_models needs R` | install R or set `linear_models.rscript` / `BSP_RSCRIPT` |
 | `Exclusion file configured but not found` | path in the experiment config is wrong |
+| `Run this from the repository root` | `cd` to the repository first; config paths are relative to it |
+| `paths [out_tables, ...] are replaced by paths.out_dir` | old experiment config: use `out_dir` |
+| `unknown top-level keys` | a misspelt or removed section in stats.yaml / the analysis block |
 | `groups.order is not set` / `group_order has moved` | add the `groups:` block to the experiment config |
 | `groups [...] are in the data but not in groups.order` | a group value in subjects.csv is not declared (typo?) |
 | `several groups share a colour` | give the groups different colours in `groups.colors` |
