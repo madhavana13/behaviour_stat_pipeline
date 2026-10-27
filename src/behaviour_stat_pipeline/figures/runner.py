@@ -329,7 +329,9 @@ def _auto_km_specs_from_time_to_event(
     if missing:
         raise ValueError(f"[figures:auto_from_time_to_event] {assay}: endpoints not in processed CSV: {missing}")
 
-    variants = [False] + ([True] if auto.get("by_sex", True) else [])
+    # The female | male version only makes sense when sex is a factor of the analysis
+    tte_factors = (config.get("time_to_event", {}) or {}).get("factors", ["group", "sex"]) or []
+    variants = [False] + ([True] if auto.get("by_sex", True) and "sex" in tte_factors else [])
     out_specs: List[Dict[str, Any]] = []
     for endpoint in endpoints:
         endpoint = str(endpoint)

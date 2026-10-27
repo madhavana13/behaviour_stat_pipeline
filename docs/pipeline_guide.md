@@ -101,6 +101,17 @@ assay_instances:                     # every test that was run, by the name used
   LM:
     assay_type: LM
     trial_duration_s: 300            # nominal trial length (censoring of latencies)
+  NOR:
+    assay_type: NOR
+    objects: [flask, lego_tower]     # the two object types, as named in the export columns
+    fam_pattern: "*FAM*_output_summary.csv"
+    test_pattern: "*TEST*_output_summary.csv"
+    min_explore_s: 20                # advisory low-exploration flag
+  VIT:
+    assay_type: VIT
+    filename_tokens:                 # token in the file name -> value (exactly one must match)
+      timepoint: {first_min: Before, second_min: After}
+      phase: {hand: hand, standing: standing}
 
 analysis:                            # THE ANALYSIS PLAN - see section 5
   assays: [vit, nor, oft1, oft2, oft3, oft4, lm, misc]
@@ -140,6 +151,17 @@ For one assay instance:
    MISC sums/ratios defined in `stats.yaml -> misc.derived_metrics`).
 6. Writes `processed/<INSTANCE>_processed.csv` and a summary log.
 
+Assay-specific settings come from `assay_instances.<NAME>` in the experiment config, not from
+the code:
+
+- **NOR**: `objects` (required; any two object names, any number of copies per object),
+  `fam_pattern` / `test_pattern` (which files are the familiarisation and test sessions),
+  `min_explore_s`. The familiar object is the one with non-zero values in FAM; in TEST exactly
+  one copy of each object may carry data.
+- **VIT**: `filename_tokens` maps parts of the file name to timepoint and phase; a file name that
+  matches none or several tokens is an error.
+- **All**: `classifier_pattern` for behaviour-classifier reports.
+
 Processed files are never edited by the statistics; exclusions are applied at analysis time.
 
 **Sucrose splash test (SPL)** is ingested with the same parameters as OFT: same EthoVision summary
@@ -175,7 +197,7 @@ Grooming is the main SPL outcome. If a *latency to first groom* is exported, ana
 | `primary_one_sample.nulls` | endpoints tested against a fixed value (e.g. NOR DI vs 0) |
 | `secondary_two_way_anova.endpoints` | endpoints for group x sex ANOVA + posthoc |
 | `time_to_event.endpoints` | latencies where the event may not happen (censoring) |
-| `linear_models.models` | mixed models / ANCOVA (section 6.5) |
+| `linear_models.models` | mixed models / ANCOVA (section 6.6) |
 | `correlations.specs` | x–y pairs (always exploratory) |
 | `diagnostics.endpoints` | distribution, variance and outlier checks (descriptive) |
 | `primary_endpoints` | which of the above test the experiment's hypotheses |
@@ -242,7 +264,28 @@ A configured exclusion file that does not exist is an error. (`sensitivity` rows
 | Diagnostics | distributions, unequal variances, outliers | Brown–Forsythe, variance ratio, MAD-z, ROUT-like | `<ASSAY>_endpoint_diagnostics_by_*.csv`, `_flagged_points_*` | – (flags only, never excludes) |
 | Linear models | repeated sessions, covariates, unequal variances | nlme lme/gls, Type III | `outputs/<EXP>/MODELS/tables/<model>_*.csv` | Holm across endpoints per term, within role; Holm across contrasts |
 
-### 6.3 Which analysis for which endpoint
+### 6.3 Designs: factors and levels
+
+ANOVA, posthoc and time-to-event take **one or two factors with any number of levels**
+(`secondary_two_way_anova.factors`, `time_to_event.factors`; default `[group, sex]`). For a
+single-sex study set them to `[group]` in the experiment's plan; for three groups nothing changes.
+
+- ANOVA: one-way or two-way; Type II or III.
+- Posthoc: cells can be named by level (`{group: ifs, sex: male}`) or by position in the level
+  order (`{group: 1, sex: 1}`). Instead of listing pairs, `comparisons` generates them:
+
+  ```yaml
+  posthoc:
+    comparisons:
+      - {factor: group, by: [sex]}   # every pair of groups within each sex; with one factor: by: []
+  ```
+  Šidák is applied over all comparisons of an endpoint.
+- Time to event: a factor with more than two levels gets an omnibus likelihood-ratio test
+  (term = factor, df = levels − 1) plus one hazard-ratio row per level against the reference
+  (first level alphabetically), term `group[ifs vs control]`. Box plots and KM figures then show
+  the omnibus result as text rather than a two-group bracket.
+
+### 6.4 Which analysis for which endpoint
 
 - **Continuous, one value per mouse** (distances, times): two-way ANOVA.
 - **Index tested against chance** (NOR DI): one-sample test, *and* the ANOVA for group differences.
@@ -251,17 +294,17 @@ A configured exclusion file that does not exist is an error. (`sensitivity` rows
   A missing latency in a recorded animal is censored at that animal's recording length
   (`time_to_event.duration_col`, else `trial_duration_s`); animals without a recording are excluded.
   Never put such latencies in the ANOVA – that drops the slowest animals (config error).
-- **The same test repeated over sessions** (OFT1–4): a linear mixed model (6.5).
+- **The same test repeated over sessions** (OFT1–4): a linear mixed model (6.6).
 - **Skewed, positive data**: add a `log` transform in the linear model, check `shapiro_p`.
 
-### 6.4 Reading the tables
+### 6.5 Reading the tables
 
 Common columns: `endpoint`, `term`, `p_value` (raw), `p_adj` (corrected), `significance_label`
 (from `p_adj`), `endpoint_role`, `n`, exclusion columns, `run_id`. Hazard ratio > 1 = the event
 happens sooner. Linear-model estimates are on the transformed scale given in `transform`
 (log: differences are log ratios; `exp(estimate)` is the ratio).
 
-### 6.5 Linear and mixed models (optional R backend)
+### 6.6 Linear and mixed models (optional R backend)
 
 One model spec covers one design and many endpoints:
 

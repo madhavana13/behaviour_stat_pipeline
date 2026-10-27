@@ -2,10 +2,11 @@
 NOR (Novel Object Recognition) assay helpers.
 
 Goal (automated and audit-friendly):
-- Determine familiar object TYPE from FAM session:
-    - if flask columns are non-zero => familiar_type = "flask"
-    - if lego_tower columns are non-zero => familiar_type = "lego_tower"
-    - if both are non-zero => raise (tracking / labeling issue)
+- The experiment config names the two object types (assay_instances.NOR.objects,
+  e.g. [flask, lego_tower]). Nothing about the objects is hardcoded.
+- Determine the familiar object TYPE from the FAM session:
+    - the object type whose columns are non-zero in FAM is familiar
+    - if both or neither are non-zero => raise (tracking / labeling issue)
 - Use familiar_type to label TEST measures as familiar vs novel.
 
 Outputs (Option A):
@@ -15,8 +16,11 @@ Outputs (Option A):
     - interaction (2 cm; "time in interaction zone of ...")
 
 Assumptions:
-- FAM file contains flask_0, flask_1, lego_tower_0, lego_tower_1 columns. 
-- TEST file contains flask_0 and lego_tower_0 columns.
+- Columns are named time_exploring_<object>_<copy> and
+  time_in_interaction_zone_of_<object>_<copy> (copy = 0, 1, ...), for both objects.
+- FAM: all copies of the familiar object are summed.
+- TEST: one copy of each object carries data (empty copies are ignored; data in
+  more than one copy of an object is an error).
 
 Note:
 - Processed output preserves ALL raw measures by prefixing:
@@ -26,8 +30,8 @@ Note:
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
-from typing import Literal
 
 import numpy as np
 import pandas as pd
@@ -35,18 +39,9 @@ import pandas as pd
 from behaviour_stat_pipeline.common.qc import assert_unique_key
 from behaviour_stat_pipeline.common.schema import normalize_headers
 
-FamiliarType = Literal["flask", "lego_tower"]
-
-# Canonical column names in your exports
-FAM_EXPLORE_FLASK = ["time_exploring_flask_0", "time_exploring_flask_1"]
-FAM_EXPLORE_TOWER = ["time_exploring_lego_tower_0", "time_exploring_lego_tower_1"]
-FAM_IZ_FLASK = ["time_in_interaction_zone_of_flask_0", "time_in_interaction_zone_of_flask_1"]
-FAM_IZ_TOWER = ["time_in_interaction_zone_of_lego_tower_0", "time_in_interaction_zone_of_lego_tower_1"]
-
-TEST_EXPLORE_FLASK = "time_exploring_flask_0"
-TEST_EXPLORE_TOWER = "time_exploring_lego_tower_0"
-TEST_IZ_FLASK = "time_in_interaction_zone_of_flask_0"
-TEST_IZ_TOWER = "time_in_interaction_zone_of_lego_tower_0"
+# Column name templates in the tracking exports (after schema normalisation)
+EXPLORE_TEMPLATE = "time_exploring_{obj}_"
+IZ_TEMPLATE = "time_in_interaction_zone_of_{obj}_"
 
 
 REQUIRED_ID_COLS = {"mouse_id", "group", "sex", "timepoint"}
@@ -55,16 +50,62 @@ REQUIRED_SESSION_COL = "session"  # runner sets this to "FAM"/"TEST"
 @dataclass(frozen=True)
 class NORConfig:
     """
-    Configuration for NOR processing.
+    Configuration for NOR processing (from assay_instances.NOR in the experiment config).
 
+    objects:
+        The two object types used, as they appear in the column names.
+    min_explore_s:
+        Advisory threshold for low-exploration flags (no rows are dropped).
     presence_rule:
         "nonzero" means any >0 in the relevant object columns implies presence.
         We raise if BOTH object types look present in FAM.
     """
+    objects: tuple[str, str]
+    min_explore_s: float = 20.0
     presence_rule: str = "nonzero"  # currently only supported value
 
+    def __post_init__(self):
+        if len(self.objects) != 2 or len(set(self.objects)) != 2:
+            raise ValueError(f"NOR needs exactly two different object types, got {list(self.objects)}")
 
-def qc_nor(fam: pd.DataFrame, test: pd.DataFrame) -> None:
+
+def object_columns(columns, template: str, obj: str) -> list[str]:
+    """All copies of an object's measure, e.g. time_exploring_flask_0, _1, ... (sorted by copy)."""
+    pattern = re.compile("^" + re.escape(template.format(obj=obj)) + r"(\d+)$")
+    found = [(int(m.group(1)), c) for c in columns if (m := pattern.match(c))]
+    return [c for _, c in sorted(found)]
+
+
+def _required_object_columns(df: pd.DataFrame, objects, where: str, prefix: str = "") -> dict:
+    """(template, object) -> columns (with `prefix`); raises if any object has no columns."""
+    unprefixed = [c[len(prefix):] for c in df.columns if c.startswith(prefix)]
+    out, missing = {}, []
+    for template in (EXPLORE_TEMPLATE, IZ_TEMPLATE):
+        for obj in objects:
+            cols = object_columns(unprefixed, template, obj)
+            if not cols:
+                missing.append(template.format(obj=obj) + "<n>")
+            out[(template, obj)] = [prefix + c for c in cols]
+    if missing:
+        raise ValueError(
+            f"NOR QC failed ({where}): no columns for {missing}. Check assay_instances.NOR.objects "
+            f"in the experiment config against the export (configured objects: {list(objects)})."
+        )
+    return out
+
+
+def _single_test_copy(test: pd.DataFrame, cols: list[str]) -> str:
+    """The one copy column of an object that carries data in TEST; error if several do."""
+    with_data = [c for c in cols if test[c].notna().any()]
+    if len(with_data) > 1:
+        raise ValueError(
+            f"NOR (TEST): several copies of the same object carry data: {with_data}. "
+            "The test session should have one copy of the familiar and one of the novel object."
+        )
+    return with_data[0] if with_data else cols[0]
+
+
+def qc_nor(fam: pd.DataFrame, test: pd.DataFrame, cfg: NORConfig) -> None:
     missing_fam = REQUIRED_ID_COLS - set(fam.columns)
     missing_test = REQUIRED_ID_COLS - set(test.columns)
     if missing_fam:
@@ -79,17 +120,10 @@ def qc_nor(fam: pd.DataFrame, test: pd.DataFrame) -> None:
     assert_unique_key(fam, ["mouse_id"], where="NOR FAM (session-level)")
     assert_unique_key(test, ["mouse_id"], where="NOR TEST (session-level)")
 
-    # Required object columns
-    fam_required = set(FAM_EXPLORE_FLASK + FAM_EXPLORE_TOWER + FAM_IZ_FLASK + FAM_IZ_TOWER)
-    test_required = {TEST_EXPLORE_FLASK, TEST_EXPLORE_TOWER, TEST_IZ_FLASK, TEST_IZ_TOWER}
+    # Required object columns (raises naming what is missing)
+    _required_object_columns(fam, cfg.objects, "FAM")
+    _required_object_columns(test, cfg.objects, "TEST")
 
-    miss_fam_obj = sorted(fam_required - set(fam.columns))
-    miss_test_obj = sorted(test_required - set(test.columns))
-    if miss_fam_obj:
-        raise ValueError(f"NOR QC failed (FAM): missing object columns: {miss_fam_obj}")
-    if miss_test_obj:
-        raise ValueError(f"NOR QC failed (TEST): missing object columns: {miss_test_obj}")
-    
     for col in ["raw_id", "source_file"]:
         if col not in fam.columns:
             raise ValueError(f"NOR QC failed (FAM): missing provenance column '{col}'")
@@ -101,7 +135,7 @@ def derive_nor_metrics(
     test: pd.DataFrame,
     *,
     schema_aliases: dict,
-    cfg: NORConfig | None = None,
+    cfg: NORConfig,
 ) -> pd.DataFrame:
     """
     Return one row per mouse_id × timepoint (runner sets timepoint="Single").
@@ -113,10 +147,9 @@ def derive_nor_metrics(
       - test_familiar_iz_time,      test_novel_iz_time
       - di_explore, pi_explore
       - di_iz,      pi_iz
-      - familiar_type  ("flask" or "lego_tower")
+      - familiar_type  (one of cfg.objects)
       Also preserves ALL raw measures by prefixing them (fam_/test_).
     """
-    cfg = cfg or NORConfig()
     if cfg.presence_rule != "nonzero":
         raise ValueError(f"Unsupported NORConfig.presence_rule: {cfg.presence_rule}")
 
@@ -131,22 +164,7 @@ def derive_nor_metrics(
         schema=schema_aliases,
     )
 
-    # Loud post-normalization check: canonical columns must now exist
-    fam_expected = set(FAM_EXPLORE_FLASK + FAM_EXPLORE_TOWER + FAM_IZ_FLASK + FAM_IZ_TOWER)
-    test_expected = {TEST_EXPLORE_FLASK, TEST_EXPLORE_TOWER, TEST_IZ_FLASK, TEST_IZ_TOWER}
-
-    fam_missing = sorted(fam_expected - set(fam.columns))
-    test_missing = sorted(test_expected - set(test.columns))
-    if fam_missing:
-        raise ValueError(
-            f"NOR: Missing canonical FAM columns after schema normalization: {fam_missing}"
-        )
-    if test_missing:
-        raise ValueError(
-            f"NOR: Missing canonical TEST columns after schema normalization: {test_missing}"
-        )
-
-    qc_nor(fam, test)
+    qc_nor(fam, test, cfg)
 
     fam = fam.copy()
     test = test.copy()
@@ -167,50 +185,49 @@ def derive_nor_metrics(
     fam = _prefix_non_id_columns(fam, "fam_", id_cols=id_cols)
     test = _prefix_non_id_columns(test, "test_", id_cols=id_cols)
 
-    # Prefixed column groups
-    fam_explore_flask = [f"fam_{c}" for c in FAM_EXPLORE_FLASK]
-    fam_explore_tower = [f"fam_{c}" for c in FAM_EXPLORE_TOWER]
-    fam_iz_flask = [f"fam_{c}" for c in FAM_IZ_FLASK]
-    fam_iz_tower = [f"fam_{c}" for c in FAM_IZ_TOWER]
-
-    test_explore_flask = f"test_{TEST_EXPLORE_FLASK}"
-    test_explore_tower = f"test_{TEST_EXPLORE_TOWER}"
-    test_iz_flask = f"test_{TEST_IZ_FLASK}"
-    test_iz_tower = f"test_{TEST_IZ_TOWER}"
+    obj_a, obj_b = cfg.objects
+    fam_cols = _required_object_columns(fam, cfg.objects, "FAM", prefix="fam_")
+    test_cols = _required_object_columns(test, cfg.objects, "TEST", prefix="test_")
 
     # Infer familiar object from FAM session
-    flask_any = (fam[fam_explore_flask + fam_iz_flask] > 0).any(axis=1)
-    tower_any = (fam[fam_explore_tower + fam_iz_tower] > 0).any(axis=1)
+    a_any = (fam[fam_cols[(EXPLORE_TEMPLATE, obj_a)] + fam_cols[(IZ_TEMPLATE, obj_a)]] > 0).any(axis=1)
+    b_any = (fam[fam_cols[(EXPLORE_TEMPLATE, obj_b)] + fam_cols[(IZ_TEMPLATE, obj_b)]] > 0).any(axis=1)
 
-    if (flask_any & tower_any).any():
-        bad_ids = fam.loc[(flask_any & tower_any), "mouse_id"].astype(str).tolist()
+    if (a_any & b_any).any():
+        bad_ids = fam.loc[(a_any & b_any), "mouse_id"].astype(str).tolist()
         raise ValueError(
-            "NOR: Both flask and lego_tower appear non-zero in FAM for some mice "
+            f"NOR: Both {obj_a} and {obj_b} appear non-zero in FAM for some mice "
             "(tracking/labeling issue). "
             f"mouse_id examples: {bad_ids[:20]}"
         )
 
-    if (~flask_any & ~tower_any).any():
-        bad_ids = fam.loc[(~flask_any & ~tower_any), "mouse_id"].astype(str).tolist()
+    if (~a_any & ~b_any).any():
+        bad_ids = fam.loc[(~a_any & ~b_any), "mouse_id"].astype(str).tolist()
         raise ValueError(
-            "NOR: Neither flask nor lego_tower appears non-zero in FAM for some mice; "
+            f"NOR: Neither {obj_a} nor {obj_b} appears non-zero in FAM for some mice; "
             "cannot infer familiar type. "
             f"mouse_id examples: {bad_ids[:20]}"
         )
 
-    fam["fam_familiar_type"] = np.where(flask_any, "flask", "lego_tower")
+    fam["fam_familiar_type"] = np.where(a_any, obj_a, obj_b)
 
-    # Collapse FAM identical objects into a single familiar-time measure
+    # Collapse FAM identical objects (all copies) into a single familiar-time measure
     fam["fam_familiar_explore_time"] = np.where(
-        fam["fam_familiar_type"] == "flask",
-        fam[fam_explore_flask].sum(axis=1),
-        fam[fam_explore_tower].sum(axis=1),
+        fam["fam_familiar_type"] == obj_a,
+        fam[fam_cols[(EXPLORE_TEMPLATE, obj_a)]].sum(axis=1),
+        fam[fam_cols[(EXPLORE_TEMPLATE, obj_b)]].sum(axis=1),
     )
     fam["fam_familiar_iz_time"] = np.where(
-        fam["fam_familiar_type"] == "flask",
-        fam[fam_iz_flask].sum(axis=1),
-        fam[fam_iz_tower].sum(axis=1),
+        fam["fam_familiar_type"] == obj_a,
+        fam[fam_cols[(IZ_TEMPLATE, obj_a)]].sum(axis=1),
+        fam[fam_cols[(IZ_TEMPLATE, obj_b)]].sum(axis=1),
     )
+
+    # TEST: one copy per object carries data (the others are empty in the export)
+    test_explore_a = _single_test_copy(test, test_cols[(EXPLORE_TEMPLATE, obj_a)])
+    test_explore_b = _single_test_copy(test, test_cols[(EXPLORE_TEMPLATE, obj_b)])
+    test_iz_a = _single_test_copy(test, test_cols[(IZ_TEMPLATE, obj_a)])
+    test_iz_b = _single_test_copy(test, test_cols[(IZ_TEMPLATE, obj_b)])
 
     merged = fam.merge(
         test,
@@ -222,27 +239,11 @@ def derive_nor_metrics(
     merged["familiar_type"] = merged["fam_familiar_type"]
 
     # Label TEST familiar vs novel based on familiar_type
-    merged["test_familiar_explore_time"] = np.where(
-        merged["familiar_type"] == "flask",
-        merged[test_explore_flask],
-        merged[test_explore_tower],
-    )
-    merged["test_novel_explore_time"] = np.where(
-        merged["familiar_type"] == "flask",
-        merged[test_explore_tower],
-        merged[test_explore_flask],
-    )
-
-    merged["test_familiar_iz_time"] = np.where(
-        merged["familiar_type"] == "flask",
-        merged[test_iz_flask],
-        merged[test_iz_tower],
-    )
-    merged["test_novel_iz_time"] = np.where(
-        merged["familiar_type"] == "flask",
-        merged[test_iz_tower],
-        merged[test_iz_flask],
-    )
+    is_a = merged["familiar_type"] == obj_a
+    merged["test_familiar_explore_time"] = np.where(is_a, merged[test_explore_a], merged[test_explore_b])
+    merged["test_novel_explore_time"] = np.where(is_a, merged[test_explore_b], merged[test_explore_a])
+    merged["test_familiar_iz_time"] = np.where(is_a, merged[test_iz_a], merged[test_iz_b])
+    merged["test_novel_iz_time"] = np.where(is_a, merged[test_iz_b], merged[test_iz_a])
 
     merged["di_explore"] = _safe_di(
         merged["test_novel_explore_time"],
@@ -263,7 +264,7 @@ def derive_nor_metrics(
 
     assert_unique_key(merged, ["mouse_id", "timepoint"], where="NOR processed")
 
-    merged = add_nor_sanity_flags(merged, min_total_s=20.0)
+    merged = add_nor_sanity_flags(merged, min_total_s=cfg.min_explore_s)
     return merged
 
 def _safe_di(novel: pd.Series, familiar: pd.Series) -> pd.Series:

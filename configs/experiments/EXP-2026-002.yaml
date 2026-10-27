@@ -79,6 +79,10 @@ assay_instances:
     raw_path: data/experiments/EXP-2026-002/raw/nor
     classifier_pattern: "*_Report_summary.csv"
     session: pre
+    objects: [flask, lego_tower]           # object types as named in the export columns
+    fam_pattern: "*FAM*_output_summary.csv"
+    test_pattern: "*TEST*_output_summary.csv"
+    min_explore_s: 20                      # advisory low-exploration flag (no exclusion)
 
   VIT:
     assay_type: VIT
@@ -87,6 +91,9 @@ assay_instances:
     raw_path: data/experiments/EXP-2026-002/raw/vit
     classifier_pattern: "*_Report_summary.csv"
     session: pre
+    filename_tokens:                       # token in file name -> value (exactly one must match)
+      timepoint: {first_min: Before, second_min: After}
+      phase: {hand: hand, standing: standing}
 
   LM:
     assay_type: LM

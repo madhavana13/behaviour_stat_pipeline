@@ -571,7 +571,9 @@ def plot_group_boxpoints(
             g_label = labels_by_term["group"]
             g_stars = _label_from_significance(g_label) if g_label is not None else None
             if g_stars is not None:
-                if group_mode == "bracket" and g_stars != "ns" and len(g_levels) >= 2 and len(x_levels) == 1:
+                # A bracket only reads correctly for two groups; with more, the omnibus result
+                # would look like a first-vs-last comparison, so it is shown as text instead
+                if group_mode == "bracket" and g_stars != "ns" and len(g_levels) == 2 and len(x_levels) == 1:
                     x = x_levels[0]
                     g1 = g_levels[0]
                     g2 = g_levels[-1]
@@ -589,7 +591,7 @@ def plot_group_boxpoints(
                         fontsize=style.bracket_fontsize,
                         color=style.axis_color,
                     )
-                elif group_mode == "text" or (group_mode == "bracket" and len(x_levels) != 1):
+                elif group_mode == "text" or (group_mode == "bracket" and (len(x_levels) != 1 or len(g_levels) != 2)):
                     text_lines.append(f"group: {g_stars}")
 
             # sex

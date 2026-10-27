@@ -59,10 +59,13 @@ def _annotation(tests: Optional[pd.DataFrame], endpoint: str, group_col: str) ->
     def fmt_p(p: float) -> str:
         return ("p < 0.001" if p < 0.001 else f"p = {p:.3f}") + suffix
 
-    lines = [
-        f"HR {row['hazard_ratio']:.2f} [{row['hr_ci_low']:.2f}, {row['hr_ci_high']:.2f}]",
-        f"Cox {fmt_p(row[p_col])}",
-    ]
+    if np.isfinite(row["hazard_ratio"]):
+        lines = [
+            f"HR {row['hazard_ratio']:.2f} [{row['hr_ci_low']:.2f}, {row['hr_ci_high']:.2f}]",
+            f"Cox {fmt_p(row[p_col])}",
+        ]
+    else:  # more than two groups: omnibus test; per-level HRs are in the table
+        lines = [f"Cox LR (df={int(row['lr_df'])}) {fmt_p(row[p_col])}"]
     logrank = sub[sub["model"] == "log-rank"]
     if not logrank.empty:
         lines.append(f"log-rank {fmt_p(logrank.iloc[0][p_col])}")

@@ -52,7 +52,7 @@ _ALLOWED_KEYS = {
         "enabled", "type", "include_interaction", "factors", "correction_across_endpoints",
         "factor_orders", "endpoints", "posthoc",
     },
-    "secondary_two_way_anova.posthoc": {"enabled", "method", "correction", "selected_pairs"},
+    "secondary_two_way_anova.posthoc": {"enabled", "method", "correction", "selected_pairs", "comparisons"},
     "time_to_event": {"enabled", "factors", "duration_col", "correction_across_endpoints", "endpoints"},
     "linear_models": {"enabled", "rscript", "correction_across_endpoints", "contrast_correction", "models"},
     "correlations": {"enabled", "defaults", "default_groupings", "correction", "min_n", "specs"},
@@ -172,6 +172,21 @@ def validate_stats_config(cfg: dict) -> None:
     if posthoc:
         check_choice(posthoc.get("method", "cell_means_prism"), {"cell_means_prism"}, "secondary_two_way_anova.posthoc.method")
         check_choice(posthoc.get("correction", "sidak"), {"sidak"}, "secondary_two_way_anova.posthoc.correction")
+        if posthoc.get("enabled", True) and not (posthoc.get("selected_pairs") or posthoc.get("comparisons")):
+            errors.append("secondary_two_way_anova.posthoc: enabled but neither selected_pairs nor comparisons is set")
+        anova_factors = list(sec.get("factors", ["group", "sex"]) or [])
+        for i, comp in enumerate(posthoc.get("comparisons", []) or []):
+            others = sorted(f for f in anova_factors if f != (comp or {}).get("factor"))
+            if not isinstance(comp, dict) or comp.get("factor") not in anova_factors \
+                    or sorted(comp.get("by", []) or []) != others:
+                errors.append(
+                    f"secondary_two_way_anova.posthoc.comparisons[{i}]: needs factor (one of {anova_factors}) "
+                    f"and by listing all other factors; got {comp}"
+                )
+    for section in ("secondary_two_way_anova", "time_to_event"):
+        n = len(((cfg.get(section, {}) or {}).get("factors", ["group", "sex"])) or [])
+        if n not in (1, 2):
+            errors.append(f"{section}.factors: one or two factors supported, got {n}")
 
     tte = cfg.get("time_to_event", {}) or {}
     check_keys(tte, "time_to_event", "time_to_event")

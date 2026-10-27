@@ -44,6 +44,15 @@ def main() -> None:
     df.loc[df.index[-1], "rec_s"] = np.nan  # one animal without a recording -> excluded, not censored
     df.loc[df.index[-1], "latency"] = np.nan
 
+    # Three-level grouping for k-level designs (separate RNG stream; other columns unchanged).
+    # Balanced-ish within sex so every group3 x sex cell has several animals.
+    rng_g = np.random.default_rng(3)
+    df["group3"] = ""
+    for sex in ["female", "male"]:
+        idx = df.index[df["sex"] == sex]
+        labels = np.resize(["a", "b", "c"], len(idx))
+        df.loc[idx, "group3"] = rng_g.permutation(labels)
+
     for col in ["y", "x2", "di"]:
         assert df[col].is_unique, f"ties in {col}; change the seed"
     assert (df["di"] != 0).all()

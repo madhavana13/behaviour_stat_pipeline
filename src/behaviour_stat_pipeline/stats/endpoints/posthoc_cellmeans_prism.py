@@ -1,15 +1,23 @@
 """
-Prism-style post hoc comparisons on CELL MEANS for a 2×2 design (two factors, each with 2 levels).
+Prism-style post hoc comparisons on CELL MEANS for one- or two-factor designs
+(any number of levels per factor).
 
 What this does (per endpoint):
 - Fits OLS with pooled variance (MSE) from the ANOVA model:
-    y ~ C(f1) * C(f2)   (or additive if include_interaction=False)
-- Computes selected pairwise comparisons of *cell means* using the pooled MSE:
+    y ~ C(f1)                       (one factor)
+    y ~ C(f1) * C(f2)               (or additive if include_interaction=False)
+- Computes pairwise comparisons of *cell means* using the pooled MSE:
     t = (mean_A - mean_B) / sqrt(MSE * (1/nA + 1/nB))
     df = df_resid from the OLS model
-- Applies Sidak adjustment across the selected pairs (k = number of selected pairs)
+- Applies Sidak adjustment across the comparisons (k = number of comparisons)
 - Adds Prism-like cosmetic columns:
     contrast_label, diff_prism_direction, significance_label
+
+Which comparisons:
+- selected_pairs: explicit cells, each factor given by level name ({group: ifs, sex: male})
+  or by position in the level order ({group: 1, sex: 1}).
+- comparisons: generated, e.g. {factor: group, by: [sex]} = every pair of group levels
+  within each sex. `by` must list all other factors (comparisons are of cells).
 
 Important:
 - This module is PURE: it does not read cfg, does not do I/O.
@@ -18,7 +26,8 @@ Important:
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Tuple
+from itertools import combinations, product
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 import pandas as pd
@@ -47,44 +56,75 @@ def _significance_label(p: float) -> str:
         return "ns"
 
 
-def _infer_two_levels(
-    s: pd.Series, *, order: Optional[List[str]] = None
-) -> List[str]:
+def _infer_levels(s: pd.Series, *, order: Optional[List[str]] = None) -> List[str]:
     """
-    Infer exactly two levels from the data, deterministically.
-    If order is provided, respects it (filtered to observed).
+    Observed levels (at least two), deterministically ordered.
+    If order is provided, its levels come first (filtered to observed), then the rest sorted.
     """
     observed = [str(x) for x in s.dropna().astype(str).unique().tolist()]
-    obs_set = set(observed)
-
-    if order:
-        levels = [str(x) for x in order if str(x) in obs_set]
-    else:
-        levels = sorted(obs_set)
-
-    if len(levels) != 2:
-        raise ValueError(f"Expected exactly 2 observed levels, got {levels}")
+    preferred = [str(x) for x in (order or []) if str(x) in set(observed)]
+    levels = preferred + sorted(x for x in observed if x not in preferred)
+    if len(levels) < 2:
+        raise ValueError(f"Expected at least 2 observed levels, got {levels}")
     return levels
 
 
 def _decode_cell(
-    cell_spec: Dict[str, int],
+    cell_spec: Dict[str, Any],
     factors: List[str],
     levels_by_factor: Dict[str, List[str]],
 ) -> Dict[str, str]:
     """
-    Convert a cell spec like {group:0, sex:1} into actual levels using levels_by_factor.
+    Convert a cell spec into actual levels. Each factor is given either by level name
+    ({group: "ifs"}) or by position in the level order ({group: 1}).
     """
     out: Dict[str, str] = {}
     for f in factors:
         if f not in cell_spec:
             raise KeyError(f"Cell spec missing '{f}': {cell_spec}")
-        idx = int(cell_spec[f])
+        value = cell_spec[f]
         levels = levels_by_factor[f]
-        if idx < 0 or idx >= len(levels):
-            raise IndexError(f"Index {idx} out of range for factor '{f}' levels {levels}")
-        out[f] = str(levels[idx])
+        if isinstance(value, (int, np.integer)) and not isinstance(value, bool):
+            idx = int(value)
+            if idx < 0 or idx >= len(levels):
+                raise IndexError(f"Index {idx} out of range for factor '{f}' levels {levels}")
+            out[f] = str(levels[idx])
+        else:
+            if str(value) not in levels:
+                raise ValueError(f"Level {value!r} of factor '{f}' not observed; levels are {levels}")
+            out[f] = str(value)
     return out
+
+
+def expand_comparisons(
+    comparisons: List[Dict[str, Any]],
+    factors: List[str],
+    levels_by_factor: Dict[str, List[str]],
+) -> List[Dict[str, Any]]:
+    """
+    {factor: group, by: [sex]} -> one pair per combination of group levels within each sex.
+    Returns selected_pairs-style dicts with level names.
+    """
+    pairs: List[Dict[str, Any]] = []
+    for comp in comparisons:
+        factor = comp["factor"]
+        by = list(comp.get("by", []) or [])
+        others = [f for f in factors if f != factor]
+        if factor not in factors or sorted(by) != sorted(others):
+            raise ValueError(
+                f"comparison {comp}: factor must be one of {factors} and `by` must list all other "
+                f"factors ({others}); comparisons are between cells"
+            )
+        for by_levels in product(*[levels_by_factor[b] for b in by]) if by else [()]:
+            fixed = dict(zip(by, by_levels))
+            for a, b in combinations(levels_by_factor[factor], 2):
+                suffix = "" if not by else "|" + ",".join(f"{k}={v}" for k, v in fixed.items())
+                pairs.append({
+                    "name": f"{factor}:{a}_vs_{b}{suffix}",
+                    "a": {**fixed, factor: a},
+                    "b": {**fixed, factor: b},
+                })
+    return pairs
 
 
 def _cell_mask(d: pd.DataFrame, cell: Dict[str, str], factors: List[str]) -> np.ndarray:
@@ -103,6 +143,7 @@ def run_posthoc_cellmeans_prism(
     include_interaction: bool,
     factor_orders: Optional[Dict[str, List[str]]] = None,
     selected_pairs: Optional[List[Dict[str, Any]]] = None,
+    comparisons: Optional[List[Dict[str, Any]]] = None,
     correction: str = "sidak",
 ) -> pd.DataFrame:
     """
@@ -115,30 +156,25 @@ def run_posthoc_cellmeans_prism(
     endpoints : list[str]
         Endpoint column names to analyze.
     factors : list[str]
-        Exactly two factor column names, e.g. ["group", "sex"].
+        One or two factor column names, e.g. ["group", "sex"] or ["group"].
     include_interaction : bool
         If True: fit y ~ C(f1)*C(f2). If False: fit additive model.
     factor_orders : dict[str, list[str]] | None
-        Optional explicit ordering of levels per factor.
-        Used to map {0,1} indices in selected_pairs to actual levels.
+        Optional explicit ordering of levels per factor (positions in selected_pairs refer to it).
         If absent/empty, levels are inferred deterministically (sorted).
     selected_pairs : list[dict] | None
-        Each item:
-          {"name": "...", "a": {"group":0, "sex":0}, "b": {"group":1, "sex":0}}
+        Each item: {"name": "...", "a": {"group": "control", "sex": 0}, "b": {...}}
+    comparisons : list[dict] | None
+        Generated pairs, e.g. [{"factor": "group", "by": ["sex"]}].
     correction : str
-        Currently supports only "sidak" (pure Sidak across K selected pairs).
+        Currently supports only "sidak" (pure Sidak across all K comparisons).
 
     Returns
     -------
-    DataFrame with one row per endpoint × selected pair.
+    DataFrame with one row per endpoint × comparison.
     """
-    if selected_pairs is None:
-        selected_pairs = []
-    if not selected_pairs:
-        raise ValueError(f"{assay}: selected_pairs is empty; nothing to compute.")
-
-    if len(factors) != 2:
-        raise ValueError(f"{assay}: expected exactly 2 factors, got {factors}")
+    if len(factors) not in (1, 2):
+        raise ValueError(f"{assay}: expected one or two factors, got {factors}")
 
     correction = str(correction).lower().strip()
     if correction != "sidak":
@@ -146,25 +182,26 @@ def run_posthoc_cellmeans_prism(
 
     factor_orders = factor_orders or {}
 
-    f1, f2 = factors
-
-    # Infer/lock factor levels (must be exactly 2 each)
+    # Infer/lock factor levels (at least 2 each)
     levels_by_factor: Dict[str, List[str]] = {
-        f1: _infer_two_levels(df[f1], order=factor_orders.get(f1)),
-        f2: _infer_two_levels(df[f2], order=factor_orders.get(f2)),
+        f: _infer_levels(df[f], order=factor_orders.get(f)) for f in factors
     }
 
+    pairs = list(selected_pairs or []) + expand_comparisons(list(comparisons or []), factors, levels_by_factor)
+    if not pairs:
+        raise ValueError(f"{assay}: no selected_pairs or comparisons; nothing to compute.")
+
     # k for Sidak = number of requested comparisons (Prism-like in your current use)
-    k = len(selected_pairs)
+    k = len(pairs)
 
     rows: List[Dict[str, Any]] = []
 
     for endpoint in endpoints:
-        needed = [endpoint, f1, f2]
+        needed = [endpoint, *factors]
         d = df.dropna(subset=needed).copy()
 
         # If a factor collapses to <2 levels after dropna, skip the entire endpoint
-        if d[f1].astype(str).nunique(dropna=False) < 2 or d[f2].astype(str).nunique(dropna=False) < 2:
+        if min(d[f].astype(str).nunique(dropna=False) for f in factors) < 2:
             rows.append(
                 {
                     "assay": assay,
@@ -192,16 +229,14 @@ def run_posthoc_cellmeans_prism(
             continue
 
         # Fit pooled-variance ANOVA model via OLS
-        if include_interaction:
-            formula = f"{_q(endpoint)} ~ C({_q(f1)}) * C({_q(f2)})"
-        else:
-            formula = f"{_q(endpoint)} ~ C({_q(f1)}) + C({_q(f2)})"
+        terms = [f"C({_q(f)})" for f in factors]
+        formula = f"{_q(endpoint)} ~ " + (" * " if include_interaction else " + ").join(terms)
 
         model = smf.ols(formula, data=d, eval_env=0).fit()
         mse = float(model.mse_resid)
         df_error = float(model.df_resid)
 
-        for pair in selected_pairs:
+        for pair in pairs:
             pair_name = str(pair.get("name", ""))
 
             cell_a = _decode_cell(pair["a"], factors, levels_by_factor)
@@ -226,7 +261,7 @@ def run_posthoc_cellmeans_prism(
             # Two-tailed p-value
             p = float(2.0 * st.t.sf(np.abs(t_stat), df_error)) if np.isfinite(t_stat) else np.nan
 
-            # Pure Sidak across k selected comparisons
+            # Pure Sidak across k comparisons
             p_sidak = float(1.0 - (1.0 - p) ** k) if np.isfinite(p) else np.nan
 
             # --- Prism-style presentation (cosmetic only) ---

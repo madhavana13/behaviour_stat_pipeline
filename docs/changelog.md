@@ -198,3 +198,34 @@ Checkpoint – Sucrose splash test (SPL) assay
 - Test: the same raw export ingested as OFT and as SPL gives identical processed tables apart from
   columns that only carry the assay name.
 - No experiment uses SPL yet; add it under `assay_instances` and `analysis` (see guide, section 4).
+
+2026-10-27 (e)
+Checkpoint – Remove hardcoded assay details and the 2 x 2 assumption
+
+### Changed (no change to existing results)
+- All 12 processed files of EXP-2025-001 and EXP-2026-002 and all 121 stats tables are identical
+  before/after (verified; run_id aside).
+
+### Added
+- NOR: object types are configured (`assay_instances.NOR.objects`), no longer hardcoded as
+  flask / lego_tower; any number of copies per object; FAM/TEST file patterns (`fam_pattern`,
+  `test_pattern`) and the low-exploration threshold (`min_explore_s`) are configurable. TEST data in
+  more than one copy of an object is an error.
+- VIT: timepoint/phase are read from the file name via `assay_instances.VIT.filename_tokens`;
+  a file name matching none or several tokens is an error (previously first match won).
+- Runners receive their `assay_instances.<NAME>` settings. `classifier_pattern` in the experiment
+  config is now honoured (it was silently ignored in favour of the default).
+- ANOVA: one or two factors, any number of levels (e.g. single-sex studies, three groups).
+- Posthoc: one or two factors, any number of levels; cells named by level or by position;
+  `comparisons: [{factor, by}]` generates all pairs.
+- Time to event: one or two factors, any number of levels; omnibus LR test (df = levels − 1) plus
+  per-level hazard ratios; unstratified log-rank with one factor.
+- Figures: two-group bracket only for two groups (omnibus result as text otherwise); KM by-sex
+  figure only when sex is a factor.
+- Reference tests for one-way ANOVA, 3 x 2 Type II/III, generated posthoc pairs, and Cox/log-rank
+  with a three-level factor (one and two factors) against base R / survival; ingestion tests for
+  configurable NOR objects and VIT tokens.
+
+### Known issues
+- Group colours in figures.yaml are shared across experiments: `ifs` and `stressed` are both
+  darkorange (to be fixed with per-experiment group order/labels/colours).

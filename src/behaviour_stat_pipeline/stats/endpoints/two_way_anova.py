@@ -30,46 +30,43 @@ def run_two_way_anova(
     typ: int = 3,
 ) -> pd.DataFrame:
     """
-    Tidy two-way ANOVA table (Type III by default) for:
-        endpoint ~ C(f1) * C(f2)
+    Tidy one- or two-way ANOVA table (Type III by default) for:
+        endpoint ~ C(f1)              (one factor, e.g. a single-sex study)
+        endpoint ~ C(f1) * C(f2)      (two factors)
+    Each factor may have any number of levels (>= 2).
     Type III uses sum-to-zero (effect) coding, matching Prism/SPSS/car::Anova.
 
     Robust to arbitrary column names (spaces, punctuation) via patsy Q("...").
     """
-    if len(factors) != 2:
-        raise ValueError(f"two-way ANOVA requires exactly 2 factors, got {factors}")
-
-    f1, f2 = factors
+    if len(factors) not in (1, 2):
+        raise ValueError(f"ANOVA supports one or two factors, got {factors}")
 
     # Drop rows missing outcome or factor values
-    needed = [endpoint, f1, f2]
-    d = df.dropna(subset=needed).copy()
+    needed = [endpoint, *factors]
 
     # Guard: ensure required columns exist
-    missing = [c for c in needed if c not in d.columns]
+    missing = [c for c in needed if c not in df.columns]
     if missing:
-        raise KeyError(f"{assay}:{endpoint}: missing columns for two-way ANOVA: {missing}")
+        raise KeyError(f"{assay}:{endpoint}: missing columns for ANOVA: {missing}")
+    d = df.dropna(subset=needed).copy()
 
     # Guard: factors must have >= 2 levels to estimate effects
-    if d[f1].nunique(dropna=False) < 2 or d[f2].nunique(dropna=False) < 2:
+    n_levels = {f: d[f].nunique(dropna=False) for f in factors}
+    if min(n_levels.values()) < 2:
         raise ValueError(
-            f"{assay}:{endpoint}: cannot run two-way ANOVA because one factor has <2 levels "
-            f"(levels: {f1}={d[f1].nunique(dropna=False)}, {f2}={d[f2].nunique(dropna=False)})."
+            f"{assay}:{endpoint}: cannot run ANOVA because a factor has <2 levels ({n_levels}). "
+            f"For a design with one level of a factor (e.g. one sex), set "
+            f"secondary_two_way_anova.factors to the remaining factor in the experiment's analysis plan."
         )
 
     # Patsy-safe quoting for arbitrary column names
     y = f'Q("{endpoint}")'
-    f1q = f'Q("{f1}")'
-    f2q = f'Q("{f2}")'
 
     # Type III SS are only meaningful with sum-to-zero contrasts; the default
     # Treatment coding tests "simple" effects at the reference level instead.
     coding = ", Sum" if typ == 3 else ""
-
-    if include_interaction:
-        formula = f"{y} ~ C({f1q}{coding}) * C({f2q}{coding})"
-    else:
-        formula = f"{y} ~ C({f1q}{coding}) + C({f2q}{coding})"
+    terms = [f'C(Q("{f}"){coding})' for f in factors]
+    formula = f"{y} ~ " + (" * " if include_interaction else " + ").join(terms)
 
     # Fit OLS and compute ANOVA
     model = smf.ols(formula, data=d, eval_env=0).fit()
@@ -82,7 +79,7 @@ def run_two_way_anova(
     aov["endpoint"] = endpoint
     aov["n"] = int(model.nobs)
     aov["typ"] = int(typ)
-    aov["include_interaction"] = bool(include_interaction)
+    aov["include_interaction"] = bool(include_interaction and len(factors) == 2)
 
     # Standardize columns
     aov = aov.rename(columns={"PR(>F)": "p_value"})

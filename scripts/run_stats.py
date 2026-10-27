@@ -456,7 +456,8 @@ def run_posthoc(df: pd.DataFrame, cfg, assay: str, exclusions: pd.DataFrame,) ->
             factors=cfg.secondary_two_way_anova_factors,
             include_interaction=cfg.secondary_two_way_anova_include_interaction,
             factor_orders=getattr(cfg, "secondary_two_way_anova_factor_orders", {}) or {},
-            selected_pairs=list(posthoc_cfg.get("selected_pairs", [])),
+            selected_pairs=list(posthoc_cfg.get("selected_pairs", []) or []),
+            comparisons=list(posthoc_cfg.get("comparisons", []) or []),
             correction=str(posthoc_cfg.get("correction", "sidak")),
         )
 

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
@@ -77,6 +77,8 @@ class RunContext:
     schema_aliases: dict
     assay_instance: str = ""
     session: str = ""
+    # assay_instances.<NAME> from the experiment config (patterns, objects, filename tokens, ...)
+    instance_cfg: dict = field(default_factory=dict)
 
 
 class BaseAssayRunner:
@@ -115,7 +117,12 @@ class BaseAssayRunner:
         return df
     
     def classifier_pattern(self, ctx: RunContext) -> str:
-        return str(ctx.cfg.get("classifier_pattern", "*_Report_summary.csv"))
+        # Experiment instance setting first (it used to be ignored), then shared config, then default
+        return str(
+            ctx.instance_cfg.get("classifier_pattern")
+            or ctx.cfg.get("classifier_pattern")
+            or "*_Report_summary.csv"
+        )
 
     def find_classifier_files(self, ctx: RunContext) -> list[Path]:
         pattern = self.classifier_pattern(ctx)
@@ -296,7 +303,7 @@ class BaseAssayRunner:
             df = self.load_one_file(f, subjects, ctx.raw_id_col)
             df["assay_instance"] = ctx.assay_instance or self.assay_name
             df["session"] = ctx.session or ctx.assay_instance or self.assay_name
-            dfs.append(self.annotate_loaded_df(df, f))
+            dfs.append(self.annotate_loaded_df(df, f, ctx))
 
         primary = pd.concat(dfs, ignore_index=True)
 
@@ -313,7 +320,7 @@ class BaseAssayRunner:
         merged = self.merge_classifier_summary(primary, classifier)
         return merged, len(files) + len(classifier_files)
 
-    def annotate_loaded_df(self, df: pd.DataFrame, source_file: Path) -> pd.DataFrame:
+    def annotate_loaded_df(self, df: pd.DataFrame, source_file: Path, ctx: RunContext) -> pd.DataFrame:
         return df
 
     def derive_processed(self, long_df: pd.DataFrame) -> pd.DataFrame:
@@ -353,32 +360,42 @@ class BaseAssayRunner:
         print(f"Summary: {res.out_summary}")
 
 
+# Used when assay_instances.VIT.filename_tokens is not set: filename token -> value
+DEFAULT_VIT_FILENAME_TOKENS = {
+    "timepoint": {"first_min": "Before", "second_min": "After"},
+    "phase": {"hand": "hand", "standing": "standing"},
+}
+
+
+def _token_value(name: str, tokens: dict[str, str], what: str, filename: str) -> str:
+    """Exactly one token of `tokens` must occur in the (lower-case) file name."""
+    hits = [t for t in tokens if str(t).lower() in name]
+    if len(hits) != 1:
+        raise ValueError(
+            f"Cannot infer VIT {what} from filename {filename!r}: "
+            f"{'none' if not hits else 'several'} of the tokens {list(tokens)} found"
+            f"{'' if not hits else ' (' + ', '.join(hits) + ')'}. "
+            "Set assay_instances.VIT.filename_tokens in the experiment config."
+        )
+    return str(tokens[hits[0]])
+
+
 class VITRunner(BaseAssayRunner):
     assay_name = "VIT"
     default_output = "data/processed/VIT_processed.csv"
 
     @staticmethod
-    def infer_vit_timepoint_phase_from_filename(p: Path) -> tuple[str, str]:
+    def infer_vit_timepoint_phase_from_filename(p: Path, tokens: dict | None = None) -> tuple[str, str]:
+        tokens = tokens or DEFAULT_VIT_FILENAME_TOKENS
         name = p.name.lower()
-
-        if "first_min" in name:
-            timepoint = "Before"
-        elif "second_min" in name:
-            timepoint = "After"
-        else:
-            raise ValueError(f"Cannot infer VIT timepoint from filename: {p.name}")
-
-        if "hand" in name:
-            phase = "hand"
-        elif "standing" in name:
-            phase = "standing"
-        else:
-            raise ValueError(f"Cannot infer VIT phase from filename: {p.name}")
-
+        timepoint = _token_value(name, tokens["timepoint"], "timepoint", p.name)
+        phase = _token_value(name, tokens["phase"], "phase", p.name)
         return timepoint, phase
 
-    def annotate_loaded_df(self, df: pd.DataFrame, source_file: Path) -> pd.DataFrame:
-        tp, ph = self.infer_vit_timepoint_phase_from_filename(source_file)
+    def annotate_loaded_df(self, df: pd.DataFrame, source_file: Path, ctx: RunContext) -> pd.DataFrame:
+        tp, ph = self.infer_vit_timepoint_phase_from_filename(
+            source_file, ctx.instance_cfg.get("filename_tokens")
+        )
         df["timepoint"] = tp
         df["phase"] = ph
         return df
@@ -400,7 +417,7 @@ class VITRunner(BaseAssayRunner):
 class SingleSessionRunner(BaseAssayRunner):
     timepoint_label = "Single"
 
-    def annotate_loaded_df(self, df: pd.DataFrame, source_file: Path) -> pd.DataFrame:
+    def annotate_loaded_df(self, df: pd.DataFrame, source_file: Path, ctx: RunContext) -> pd.DataFrame:
         df["timepoint"] = self.timepoint_label
         return df
 
@@ -458,16 +475,31 @@ class NORRunner(BaseAssayRunner):
     assay_name = "NOR"
     default_output = "data/processed/NOR_processed.csv"
     
+    def nor_config(self, ctx: RunContext) -> NORConfig:
+        objects = ctx.instance_cfg.get("objects")
+        if not objects:
+            raise ValueError(
+                "NOR: the two object types are not configured. Set assay_instances.NOR.objects in the "
+                "experiment config, e.g. objects: [flask, lego_tower] (names as in the export columns)."
+            )
+        return NORConfig(objects=tuple(objects), min_explore_s=float(ctx.instance_cfg.get("min_explore_s", 20.0)))
+
     def run(self, ctx: RunContext) -> None:
         subjects = self.load_subjects_df(ctx)
+        cfg = self.nor_config(ctx)
 
-        fam_files = sorted(ctx.root.rglob("*FAM*_output_summary.csv"))
-        test_files = sorted(ctx.root.rglob("*TEST*_output_summary.csv"))
+        fam_pattern = ctx.instance_cfg.get("fam_pattern", "*FAM*_output_summary.csv")
+        test_pattern = ctx.instance_cfg.get("test_pattern", "*TEST*_output_summary.csv")
+        fam_files = sorted(ctx.root.rglob(fam_pattern))
+        test_files = sorted(ctx.root.rglob(test_pattern))
 
         if not fam_files:
-            raise FileNotFoundError(f"No FAM files found under {ctx.root} matching *FAM*_output_summary.csv")
+            raise FileNotFoundError(f"No FAM files found under {ctx.root} matching {fam_pattern} (assay_instances.NOR.fam_pattern)")
         if not test_files:
-            raise FileNotFoundError(f"No TEST files found under {ctx.root} matching *TEST*_output_summary.csv")
+            raise FileNotFoundError(f"No TEST files found under {ctx.root} matching {test_pattern} (assay_instances.NOR.test_pattern)")
+        overlap = set(fam_files) & set(test_files)
+        if overlap:
+            raise ValueError(f"NOR: files match both fam_pattern and test_pattern: {sorted(map(str, overlap))}")
 
         fam = self._load_session(fam_files, "FAM", subjects, ctx.raw_id_col)
         test = self._load_session(test_files, "TEST", subjects, ctx.raw_id_col)
@@ -476,9 +508,9 @@ class NORRunner(BaseAssayRunner):
             fam,
             test,
             schema_aliases=ctx.schema_aliases,
-            cfg=NORConfig(),
+            cfg=cfg,
         )
-        sanity = summarize_nor_sanity(processed, min_total_s=20.0)
+        sanity = summarize_nor_sanity(processed, min_total_s=cfg.min_explore_s)
         print(sanity)
 
         out_path = self.output_path(ctx.out)

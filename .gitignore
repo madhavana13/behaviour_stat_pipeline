@@ -47,3 +47,6 @@ outputs/
 outputs/**/*.csv
 behaviour_stat_pipeline_review/
 *.zip
+
+# local scratch space for checks (not results)
+scratch/

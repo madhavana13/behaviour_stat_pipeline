@@ -52,6 +52,15 @@ def resolve_assay_identity(args: argparse.Namespace, exp_cfg: dict) -> tuple[str
 
     return requested, requested, requested
 
+def instance_config(exp_cfg: dict, assay_instance: str) -> dict:
+    """assay_instances.<NAME> from the experiment config (case-insensitive name), or {}."""
+    instances = exp_cfg.get("assay_instances", {}) or {}
+    for name, inst in instances.items():
+        if str(name).upper() == assay_instance.upper():
+            return dict(inst or {})
+    return {}
+
+
 def resolve_assay_inputs(
     args: argparse.Namespace,
     shared_cfg: dict,
@@ -137,6 +146,7 @@ def main() -> None:
         schema_aliases=schema_aliases,
         assay_instance=assay_instance,
         session=session,
+        instance_cfg=instance_config(exp_cfg, assay_instance),
     )
 
     RUNNER_REGISTRY[assay_type].run(ctx)

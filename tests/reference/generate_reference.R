@@ -171,6 +171,72 @@ ref$time_to_event <- list(
 )
 
 # ---------------------------------------------------------------------------
+# k-level designs: three-level factor group3 (a, b, c), one- and two-factor
+# ---------------------------------------------------------------------------
+d$group3 <- factor(d$group3, levels = c("a", "b", "c"))
+k3 <- list()
+
+# One-way ANOVA y ~ group3
+ow <- anova(lm(y ~ group3, data = d))
+k3$oneway <- list(F = ow["group3", "F value"], p = ow["group3", "Pr(>F)"],
+                  df = ow["group3", "Df"], df_resid = ow["Residuals", "Df"])
+
+# Two-way group3 * sex: Type II (sequential, other main effect first) and Type III (sum contrasts)
+full3 <- lm(y ~ group3 * sex, data = d)
+mse3 <- sum(residuals(full3)^2) / full3$df.residual
+a_sg3 <- anova(lm(y ~ sex + group3 + sex:group3, data = d))
+a_gs3 <- anova(lm(y ~ group3 + sex + group3:sex, data = d))
+row3 <- function(ss, df) list(F = (ss / df) / mse3, p = pf((ss / df) / mse3, df, full3$df.residual, lower.tail = FALSE))
+k3$type2 <- list(group3 = row3(a_sg3["group3", "Sum Sq"], 2), sex = row3(a_gs3["sex", "Sum Sq"], 1),
+                 interaction = row3(a_gs3["group3:sex", "Sum Sq"], 2))
+d3_3 <- drop1(lm(y ~ group3 * sex, data = d, contrasts = list(group3 = "contr.sum", sex = "contr.sum")),
+              . ~ ., test = "F")
+k3$type3 <- list(group3 = list(F = d3_3["group3", "F value"], p = d3_3["group3", "Pr(>F)"]),
+                 sex = list(F = d3_3["sex", "F value"], p = d3_3["sex", "Pr(>F)"]),
+                 interaction = list(F = d3_3["group3:sex", "F value"], p = d3_3["group3:sex", "Pr(>F)"]))
+
+# Posthoc: every pair of group3 levels within each sex, pooled MSE of the full model, Sidak over k = 6
+pairs3 <- list()
+for (sx in levels(d$sex)) for (pr in list(c("a", "b"), c("a", "c"), c("b", "c"))) {
+  ya <- d$y[d$group3 == pr[1] & d$sex == sx]
+  yb <- d$y[d$group3 == pr[2] & d$sex == sx]
+  se <- sqrt(mse3 * (1 / length(ya) + 1 / length(yb)))
+  tval <- (mean(ya) - mean(yb)) / se
+  p <- 2 * pt(abs(tval), full3$df.residual, lower.tail = FALSE)
+  pairs3[[sprintf("group3:%s_vs_%s|sex=%s", pr[1], pr[2], sx)]] <-
+    list(diff = mean(ya) - mean(yb), se = se, t = tval, p = p, p_sidak = 1 - (1 - p)^6)
+}
+k3$posthoc <- pairs3
+
+# Time to event with group3: Cox LR tests (df 2), HR per level vs "a", log-rank (df 2)
+s$group3 <- factor(s$group3, levels = c("a", "b", "c"))
+c3_add <- coxph(Surv(time, event) ~ group3 + sex, data = s, ties = "efron")
+c3_int <- coxph(Surv(time, event) ~ group3 * sex, data = s, ties = "efron")
+c3_s <- coxph(Surv(time, event) ~ sex, data = s, ties = "efron")
+c3_g <- coxph(Surv(time, event) ~ group3, data = s, ties = "efron")
+ci3 <- exp(confint(c3_add))
+w3 <- summary(c3_add)$coefficients
+lr3 <- function(full, reduced) 2 * (full$loglik[2] - reduced$loglik[2])
+k3$tte_two_factor <- list(
+  group3 = list(lr_chi2 = lr3(c3_add, c3_s), p = pchisq(lr3(c3_add, c3_s), 2, lower.tail = FALSE)),
+  hr_b = list(hr = exp(coef(c3_add)[["group3b"]]), ci_low = ci3["group3b", 1], ci_high = ci3["group3b", 2],
+              wald_p = w3["group3b", "Pr(>|z|)"]),
+  hr_c = list(hr = exp(coef(c3_add)[["group3c"]]), ci_low = ci3["group3c", 1], ci_high = ci3["group3c", 2],
+              wald_p = w3["group3c", "Pr(>|z|)"]),
+  interaction = list(lr_chi2 = lr3(c3_int, c3_add), p = pchisq(lr3(c3_int, c3_add), 2, lower.tail = FALSE)),
+  logrank = list(chi2 = survdiff(Surv(time, event) ~ group3 + strata(sex), data = s)$chisq)
+)
+k3$tte_two_factor$logrank$p <- pchisq(k3$tte_two_factor$logrank$chi2, 2, lower.tail = FALSE)
+# One factor: LR test against the null model (loglik[1] is the null partial log-likelihood)
+k3$tte_one_factor <- list(
+  lr_chi2 = 2 * (c3_g$loglik[2] - c3_g$loglik[1]),
+  logrank_chi2 = survdiff(Surv(time, event) ~ group3, data = s)$chisq
+)
+k3$tte_one_factor$p <- pchisq(k3$tte_one_factor$lr_chi2, 2, lower.tail = FALSE)
+k3$tte_one_factor$logrank_p <- pchisq(k3$tte_one_factor$logrank_chi2, 2, lower.tail = FALSE)
+ref$k_levels <- k3
+
+# ---------------------------------------------------------------------------
 # Multiple-comparison adjustments on a fixed p-value vector
 # ---------------------------------------------------------------------------
 p_in <- c(0.001, 0.008, 0.012, 0.03, 0.041, 0.2, 0.5, 0.9)

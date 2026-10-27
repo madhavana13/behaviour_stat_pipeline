@@ -26,6 +26,19 @@ assay_patterns:
   lm: "*_output_summary.csv"
   nor: "*_output_summary.csv"
 
+assay_instances:
+  NOR:
+    assay_type: NOR
+    objects: [flask, lego_tower]           # object types as named in the export columns
+    fam_pattern: "*FAM*_output_summary.csv"
+    test_pattern: "*TEST*_output_summary.csv"
+    min_explore_s: 20                      # advisory low-exploration flag (no exclusion)
+  VIT:
+    assay_type: VIT
+    filename_tokens:                       # token in file name -> value (exactly one must match)
+      timepoint: {first_min: Before, second_min: After}
+      phase: {hand: hand, standing: standing}
+
 # ---------------------------------------------------------------------------
 # Analysis plan for this experiment. Merged over configs/stats.yaml, which holds
 # method defaults only; lists here (endpoints, models, specs) replace the shared ones.

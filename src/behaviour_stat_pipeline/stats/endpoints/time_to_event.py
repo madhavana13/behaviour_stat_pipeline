@@ -85,6 +85,12 @@ def _fit_cox(d: pd.DataFrame, rhs: str):
     return model.fit(disp=False)
 
 
+def _null_llf(d: pd.DataFrame) -> float:
+    """Cox partial log-likelihood with no covariates (all hazard ratios 1), Efron ties."""
+    model = PHReg(d["_time"].to_numpy(), np.zeros((len(d), 1)), status=d["_event"].to_numpy(), ties="efron")
+    return float(model.loglike(np.zeros(1)))
+
+
 def _km_median(time: np.ndarray, event: np.ndarray) -> float:
     """Kaplan-Meier median (NaN if survival never drops to 0.5, i.e. not reached)."""
     if len(time) == 0:
@@ -126,68 +132,99 @@ def run_time_to_event(
     duration_col: Optional[str] = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
+    One or two factors, any number of levels each.
+
     Returns
     -------
-    tests : one row per term (group, sex, interaction) + one log-rank row
-    summary : one row per group and per group x sex cell (n, events, censored, KM median)
+    tests : per factor, a likelihood-ratio test against the model without it (df = levels - 1).
+            Two-level factor: that row also carries the hazard ratio of level vs reference.
+            More levels: an omnibus row (term = factor) plus one hazard-ratio row per level
+            (term = "factor[level vs reference]", p_value = Wald p).
+            Two factors: interaction LR test; log-rank test of the first factor
+            (stratified by the second, if any).
+    summary : one row per level of the first factor (and per cell with two factors):
+              n, events, censored, KM median
     """
-    if len(factors) != 2:
-        raise ValueError(f"time-to-event requires exactly 2 factors, got {factors}")
-    f1, f2 = factors
+    if len(factors) not in (1, 2):
+        raise ValueError(f"time-to-event supports one or two factors, got {factors}")
+    f1 = factors[0]
+    f2 = factors[1] if len(factors) == 2 else None
 
     d = build_survival_data(df, endpoint, trial_duration_s=trial_duration_s, duration_col=duration_col)
-    d = d.dropna(subset=[f1, f2])
-    for f in (f1, f2):
+    d = d.dropna(subset=list(factors))
+    for f in factors:
         d[f] = d[f].astype(str)
 
     base = {"assay": assay, "endpoint": endpoint, "n": int(len(d)),
             "n_events": int(d["_event"].sum()), "n_censored": int((d["_event"] == 0).sum())}
 
-    summary = pd.DataFrame(
-        [{"assay": assay, "endpoint": endpoint, "grouping": f1, **r} for r in summarise_groups(d, [f1])]
-        + [{"assay": assay, "endpoint": endpoint, "grouping": f"{f1}+{f2}", **r} for r in summarise_groups(d, [f1, f2])]
-    )
+    summary_rows = [{"assay": assay, "endpoint": endpoint, "grouping": f1, **r} for r in summarise_groups(d, [f1])]
+    if f2:
+        summary_rows += [{"assay": assay, "endpoint": endpoint, "grouping": f"{f1}+{f2}", **r}
+                         for r in summarise_groups(d, [f1, f2])]
+    summary = pd.DataFrame(summary_rows)
 
-    if d[f1].nunique() < 2 or d[f2].nunique() < 2 or d["_event"].sum() == 0:
+    if min(d[f].nunique() for f in factors) < 2 or d["_event"].sum() == 0:
         return pd.DataFrame([{**base, "term": "SKIPPED", "reason": "factor with <2 levels or no events"}]), summary
 
-    t1, t2 = f"C({_q(f1)})", f"C({_q(f2)})"
-    m_add = _fit_cox(d, f"{t1} + {t2}")
-    m_int = _fit_cox(d, f"{t1} * {t2}")
-    m_f1 = _fit_cox(d, t1)
-    m_f2 = _fit_cox(d, t2)
+    term_of = {f: f"C({_q(f)})" for f in factors}
+    model_label = " + ".join(factors)
+    m_add = _fit_cox(d, " + ".join(term_of[f] for f in factors))
+    # Log-likelihood of the model without each factor (the null model for a single factor)
+    reduced_llf = (
+        {f1: _fit_cox(d, term_of[f2]).llf, f2: _fit_cox(d, term_of[f1]).llf} if f2 else {f1: _null_llf(d)}
+    )
 
     rows = []
-    for term, factor, reduced_llf in [
-        (f1, f1, m_f2.llf),   # group adjusted for sex
-        (f2, f2, m_f1.llf),   # sex adjusted for group
-    ]:
-        names = list(m_add.model.exog_names)
-        idx = next(i for i, n in enumerate(names) if n.startswith(f"C({_q(factor)})"))
-        beta, se = float(m_add.params[idx]), float(m_add.bse[idx])
-        chi2 = float(2.0 * (m_add.llf - reduced_llf))
-        level = names[idx].split("[T.")[-1].rstrip("]")
-        ref_level = sorted(d[factor].unique())[0]
+    names = list(m_add.model.exog_names)
+    for factor in factors:
+        levels = sorted(d[factor].unique())
+        ref_level = levels[0]  # patsy's treatment reference: first level in sorted order
+        df_term = len(levels) - 1
+        chi2 = float(2.0 * (m_add.llf - reduced_llf[factor]))
+        p_lr = float(stats.chi2.sf(chi2, df_term))
+        idxs = [i for i, n in enumerate(names) if n.startswith(term_of[factor] + "[")]
+
+        def hr_fields(i):
+            beta, se = float(m_add.params[i]), float(m_add.bse[i])
+            return {
+                "hazard_ratio": float(np.exp(beta)),
+                "hr_ci_low": float(np.exp(beta - 1.959963984540054 * se)),
+                "hr_ci_high": float(np.exp(beta + 1.959963984540054 * se)),
+                "wald_p": float(m_add.pvalues[i]),
+            }
+
+        if df_term == 1:
+            level = names[idxs[0]].split("[T.")[-1].rstrip("]")
+            rows.append({**base, "term": factor, "model": model_label, "contrast": f"{level} vs {ref_level}",
+                         **hr_fields(idxs[0]), "lr_chi2": chi2, "lr_df": 1, "p_value": p_lr})
+        else:
+            rows.append({**base, "term": factor, "model": model_label, "contrast": "omnibus",
+                         "hazard_ratio": np.nan, "hr_ci_low": np.nan, "hr_ci_high": np.nan, "wald_p": np.nan,
+                         "lr_chi2": chi2, "lr_df": df_term, "p_value": p_lr})
+            for i in idxs:
+                level = names[i].split("[T.")[-1].rstrip("]")
+                hr = hr_fields(i)
+                rows.append({**base, "term": f"{factor}[{level} vs {ref_level}]", "model": model_label,
+                             "contrast": f"{level} vs {ref_level}", **hr,
+                             "lr_chi2": np.nan, "lr_df": np.nan, "p_value": hr["wald_p"]})
+
+    if f2:
+        m_int = _fit_cox(d, f"{term_of[f1]} * {term_of[f2]}")
+        df_int = (d[f1].nunique() - 1) * (d[f2].nunique() - 1)
+        chi2 = float(2.0 * (m_int.llf - m_add.llf))
         rows.append({
-            **base, "term": term, "model": f"{f1} + {f2}",
-            "contrast": f"{level} vs {ref_level}",
-            "hazard_ratio": float(np.exp(beta)),
-            "hr_ci_low": float(np.exp(beta - 1.959963984540054 * se)),
-            "hr_ci_high": float(np.exp(beta + 1.959963984540054 * se)),
-            "wald_p": float(m_add.pvalues[idx]),
-            "lr_chi2": chi2, "lr_df": 1, "p_value": float(stats.chi2.sf(chi2, 1)),
+            **base, "term": f"{f1}:{f2}", "model": f"{f1} * {f2} vs {f1} + {f2}",
+            "contrast": "", "hazard_ratio": np.nan, "hr_ci_low": np.nan, "hr_ci_high": np.nan, "wald_p": np.nan,
+            "lr_chi2": chi2, "lr_df": df_int, "p_value": float(stats.chi2.sf(chi2, df_int)),
         })
 
-    chi2 = float(2.0 * (m_int.llf - m_add.llf))
+    lr_stat, lr_p = survdiff(
+        d["_time"].to_numpy(), d["_event"].to_numpy(), d[f1].to_numpy(),
+        strata=d[f2].to_numpy() if f2 else None,
+    )
     rows.append({
-        **base, "term": f"{f1}:{f2}", "model": f"{f1} * {f2} vs {f1} + {f2}",
-        "contrast": "", "hazard_ratio": np.nan, "hr_ci_low": np.nan, "hr_ci_high": np.nan, "wald_p": np.nan,
-        "lr_chi2": chi2, "lr_df": 1, "p_value": float(stats.chi2.sf(chi2, 1)),
-    })
-
-    lr_stat, lr_p = survdiff(d["_time"].to_numpy(), d["_event"].to_numpy(), d[f1].to_numpy(), strata=d[f2].to_numpy())
-    rows.append({
-        **base, "term": f"{f1} (log-rank, stratified by {f2})", "model": "log-rank",
+        **base, "term": f"{f1} (log-rank, stratified by {f2})" if f2 else f"{f1} (log-rank)", "model": "log-rank",
         "contrast": "", "hazard_ratio": np.nan, "hr_ci_low": np.nan, "hr_ci_high": np.nan, "wald_p": np.nan,
         "lr_chi2": float(lr_stat), "lr_df": int(d[f1].nunique() - 1), "p_value": float(lr_p),
     })
