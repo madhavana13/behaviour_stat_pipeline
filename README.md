@@ -98,6 +98,19 @@ outputs/figures/
 
 ---
 
+## Requirements
+
+- Python ≥ 3.9 with the packages in `pyproject.toml` — everything except linear/mixed models.
+- **Optional: R ≥ 4.0** for `linear_models` (mixed models, ANCOVA, unequal variances).
+  Only the recommended package `nlme` and `jsonlite` are used. The pipeline calls
+  `Rscript` on `src/behaviour_stat_pipeline/stats/r/fit_nlme.R`; it is found via
+  `linear_models.rscript` in `stats.yaml`, the `BSP_RSCRIPT` environment variable,
+  `PATH`, or the standard Windows install location. If a config enables
+  `linear_models` and R is missing, the run stops with an error. R and nlme versions
+  are recorded in each model's provenance file. Tests needing R are skipped without it.
+
+---
+
 ## Typical usage
 
 Run all configured assays:

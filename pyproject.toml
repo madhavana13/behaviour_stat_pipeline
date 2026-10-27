@@ -23,6 +23,10 @@ package-dir = {"" = "src"}
 [tool.setuptools.packages.find]
 where = ["src"]
 
+# Optional R backend for linear_models (needs R with the recommended package nlme)
+[tool.setuptools.package-data]
+behaviour_stat_pipeline = ["stats/r/*.R"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"

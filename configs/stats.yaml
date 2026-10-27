@@ -330,6 +330,39 @@ time_to_event:
       - latency_to_enter_narrow_alley
       - latency_to_re_enter_narrow_alley
 
+# Linear and linear mixed models (optional R backend: nlme, ships with R).
+#   fixed:       right-hand side; factors from design.between_factors / optional.blocking_factors,
+#                `covariates`, the stacked factor (stack_as) and `baseline`
+#   random:      nlme syntax, e.g. "~ 1 | mouse_id" or "~ 1 | cage/mouse_id"; null -> no random effects (gls)
+#   baseline:    assay instance whose value of the same endpoint is a per-mouse covariate (ANCOVA);
+#                must not also be listed in assays (covariate OR repeated level, not both)
+#   variance_by: factors with their own residual variance (unequal variances); [] -> equal variances
+#   contrasts:   pairwise levels of `factor` within each level of `by` (cell means equally weighted)
+# Type III F-tests (sum-to-zero contrasts, covariates centred at the mean over animals).
+linear_models:
+  enabled: true
+  rscript: null                       # null -> BSP_RSCRIPT env var, PATH, or standard install location
+  correction_across_endpoints: holm   # per term, across the model's endpoints
+  contrast_correction: holm           # within endpoint, across the levels of `by`
+
+  models:
+    - name: oft_post_sessions
+      assays: [oft2, oft3, oft4]
+      stack_as: session
+      baseline: oft1
+      endpoints:
+        - total_distance_moved
+        - time_in_center
+      fixed: "group * sex * session + baseline"
+      random: "~ 1 | mouse_id"
+      variance_by: [group]
+      # log | log1p | sqrt | logit; applied to the endpoint and its baseline.
+      # Estimates/contrasts are then on that scale (log: differences = log ratios).
+      transforms:
+        time_in_center: log
+      contrasts:
+        - {factor: group, by: [session]}
+
 correlations:
   enabled: true
 

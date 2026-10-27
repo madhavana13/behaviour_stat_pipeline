@@ -49,6 +49,36 @@ def main() -> None:
     assert (df["di"] != 0).all()
     df.to_csv(HERE / "fixture.csv", index=False)
 
+    make_repeated()
+
+
+def make_repeated() -> None:
+    """
+    Repeated-measures fixture (tests/reference/fixture_repeated.csv) for mixed models.
+
+    24 mice (group x sex, 6 each) x 3 post sessions, plus a per-mouse baseline.
+    Mouse random intercept; residual SD larger in ifs (unequal variances); one
+    missing observation so the design is unbalanced.
+    """
+    rng = np.random.default_rng(31)
+    rows = []
+    i = 0
+    for group in ["control", "ifs"]:
+        for sex in ["female", "male"]:
+            for _ in range(6):
+                i += 1
+                g = group == "ifs"
+                baseline = rng.normal(20, 3)
+                u = rng.normal(0, 2.0)  # mouse random intercept
+                for k, session in enumerate(["S1", "S2", "S3"]):
+                    mu = 20 + 2.0 * g + 0.8 * (sex == "male") - 1.5 * k * g + 0.5 * (baseline - 20) + u
+                    y = mu + rng.normal(0, 2.5 if g else 1.0)
+                    rows.append({"mouse_id": f"R{i:02d}", "group": group, "sex": sex, "session": session,
+                                 "baseline": round(baseline, 4), "y": round(y, 4)})
+    df = pd.DataFrame(rows)
+    df.loc[5, "y"] = np.nan
+    df.to_csv(HERE / "fixture_repeated.csv", index=False)
+
 
 if __name__ == "__main__":
     main()

@@ -41,6 +41,13 @@ from behaviour_stat_pipeline.stats.endpoints.posthoc_cellmeans_prism import (
 
 from behaviour_stat_pipeline.stats.endpoints.correlations import run_correlations
 from behaviour_stat_pipeline.stats.endpoints.time_to_event import run_time_to_event
+from behaviour_stat_pipeline.stats.endpoints.linear_models import (
+    R_SCRIPT,
+    apply_transforms,
+    assemble_model_data,
+    find_rscript,
+    fit_models_r,
+)
 from behaviour_stat_pipeline.stats.diagnostics import endpoint_diagnostics, rout_diagnostics
 from behaviour_stat_pipeline.stats.corrections import adjust_pvalues
 from behaviour_stat_pipeline.stats.provenance import build_provenance, write_provenance
@@ -526,6 +533,110 @@ def run_time_to_event_stage(df: pd.DataFrame, cfg, assay: str, exclusions: pd.Da
     log_written(summary_path)
 
 
+def run_linear_models_stage(
+    cfg,
+    subjects: pd.DataFrame,
+    exclusions: pd.DataFrame,
+    *,
+    assays: list[str],
+    args,
+    exclusions_path: str,
+    out_root: Path,
+) -> None:
+    """
+    Linear / mixed models (R nlme backend). A model can span several assays, so it
+    runs once after the per-assay loop, and only if all its assays were requested.
+    Outputs: <out_root>/MODELS/tables/<model>_{anova,coefficients,contrasts,random_effects,model_info}.csv
+    """
+    if not cfg.linear_models_enabled or not cfg.linear_models_models:
+        return
+
+    factors = cfg.between_factors + cfg.blocking_factors
+    tables_dir = out_root / "MODELS" / "tables"
+    logs_dir = out_root / "MODELS" / "logs"
+    tables_dir.mkdir(parents=True, exist_ok=True)
+
+    for spec in cfg.linear_models_models:
+        name = spec["name"]
+        needed = [str(a).lower() for a in spec["assays"]] + ([str(spec["baseline"]).lower()] if spec.get("baseline") else [])
+        not_run = [a for a in needed if a not in assays]
+        if not_run:
+            print(f"NOTE [MODELS:{name}]: skipped; assays {not_run} not in this run.")
+            continue
+
+        endpoints = list(spec["endpoints"])
+        frames = {}
+        for a in needed:
+            df = prepare_analysis_df(read_processed(cfg.processed_dir, a), subjects, cfg, a)
+            frames[a] = mask_excluded_values(df, exclusions, assay=a, columns=endpoints, cfg=cfg)
+
+        rscript = find_rscript(cfg.linear_models_rscript)
+        prov = build_provenance(
+            repo_root=REPO_ROOT,
+            files={
+                "stats_config": args.config,
+                "experiment_config": args.experiment_config or None,
+                "subjects": cfg.subjects_path,
+                "exclusions": exclusions_path or None,
+                "r_script": R_SCRIPT,
+                **{f"processed_{a}": cfg.processed_dir / f"{a.upper()}_processed.csv" for a in needed},
+            },
+            argv=sys.argv,
+        )
+        prov["rscript"] = rscript
+        if prov["git"]["dirty"] and args.require_clean:
+            raise SystemExit(f"ERROR: --require-clean set and uncommitted changes: {prov['git']['dirty_files']}")
+        model_cfg = replace(cfg, run_id=prov["run_id"])
+
+        long = apply_transforms(
+            assemble_model_data(frames, spec, id_col=cfg.mouse_id_col, factors=factors), spec
+        )
+        out = fit_models_r(
+            long, spec, id_col=cfg.mouse_id_col, factors=factors,
+            factor_orders=cfg.secondary_two_way_anova_factor_orders, rscript=rscript,
+        )
+
+        info = out["model_info"]
+        failed = info[info["status"] != "ok"] if not info.empty else info
+        for _, row in failed.iterrows():
+            print(f"WARNING [MODELS:{name}]: {row['endpoint']}: {row['status']}")
+        if not info.empty:
+            prov["r_version"] = str(info["r_version"].iloc[0])
+            prov["nlme_version"] = str(info["nlme_version"].iloc[0])
+        write_provenance(prov, logs_dir / f"{name}_provenance.json")
+
+        aov = out["anova"]
+        if not aov.empty:
+            aov = aov[aov["term"] != "(Intercept)"].copy()
+            method = cfg.linear_models_correction
+            aov["p_adj"] = aov.groupby("term")["p_value"].transform(lambda s: adjust_pvalues(s, method=method))
+            aov["correction_method"] = method
+            aov["significance_label"] = aov["p_adj"].apply(_significance_label)
+            out["anova"] = aov
+
+        con = out["contrasts"]
+        if not con.empty:
+            con["by_level"] = con["by_level"].fillna("")
+            method = cfg.linear_models_contrast_correction
+            con["p_adj"] = con.groupby(["endpoint", "contrast"])["p_value"].transform(
+                lambda s: adjust_pvalues(s, method=method)
+            )
+            con["correction_method"] = method
+            con["significance_label"] = con["p_adj"].apply(_significance_label)
+            out["contrasts"] = con
+
+        # Estimates and contrasts are on the transformed scale; say so in every table
+        transforms = spec.get("transforms", {}) or {}
+        for df_out in out.values():
+            if not df_out.empty and "endpoint" in df_out.columns:
+                df_out["transform"] = df_out["endpoint"].map(transforms).fillna("none")
+
+        for table, df_out in out.items():
+            path = tables_dir / f"{name}_{table}.csv"
+            write_table(df_out, path, model_cfg)
+            log_written(path)
+
+
 def run_diagnostics(df: pd.DataFrame, cfg, assay: str, exclusions: pd.DataFrame) -> None:
     if not getattr(cfg, "diagnostics_enabled", False):
         return
@@ -813,6 +924,11 @@ def main() -> None:
         write_summary(df, assay_cfg, assay, exclusions)
 
         print("\nDone.\n")
+
+    run_linear_models_stage(
+        cfg, subjects, exclusions, assays=assays, args=args, exclusions_path=exclusions_path,
+        out_root=base_out_tables.parent,
+    )
 
 
 if __name__ == "__main__":

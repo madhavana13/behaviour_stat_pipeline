@@ -114,3 +114,31 @@ Checkpoint – Censored latencies analysed as time-to-event
 
 ### Known limitations
 - Proportional-hazards assumption is not tested yet (no Schoenfeld residual test in statsmodels).
+
+2026-10-27
+Checkpoint – Linear and linear mixed models (optional R/nlme backend)
+
+### Added
+- `linear_models` section in `stats.yaml`: per model, fixed effects, random effects (nlme syntax),
+  ANCOVA covariates, a `baseline` assay instance as per-mouse covariate, unequal residual variances
+  (`variance_by` -> nlme `varIdent`) and pairwise contrasts of equally weighted cell means.
+- Several assay instances can be stacked as a repeated factor (`stack_as`, e.g. OFT2/OFT3/OFT4 as session).
+- Engine: `nlme::lme` (random effects) or `nlme::gls` (none), REML by default; Type III F-tests with
+  sum-to-zero contrasts and covariates centred at the mean over animals; nlme denominator df.
+  Contrast df in mixed models = smallest df among the coefficients involved (conservative).
+- Outputs in `<out>/MODELS/tables/<model>_{anova,coefficients,contrasts,random_effects,model_info}.csv`;
+  `model_info` reports variance ratios, a likelihood-ratio test of unequal vs equal variances, and a
+  Shapiro-Wilk test of normalised residuals. Holm across endpoints per term; Holm across contrast levels.
+- Config validation: stacked repeated measures without a random effect, a baseline that is also a stacked
+  level (covariate OR repeated level), unknown variables in `fixed`, and malformed contrasts are errors.
+- Validation tests: gls == OLS Type III and cell contrasts (base R), lme == statsmodels MixedLM (REML),
+  gls+varIdent == WLS with the estimated weights. Skipped if R is unavailable.
+- Example model for EXP-2026-002: OFT2-4 as sessions with OFT1 as baseline covariate.
+- Per-endpoint `transforms` (log, log1p, sqrt, logit), applied to the endpoint and its baseline; values outside
+  the domain are an error. Every model table has a `transform` column (estimates are on that scale).
+  EXP-2026-002: `time_in_center` log-transformed (Shapiro-Wilk p of normalised residuals 0.0001 -> 0.23).
+
+### Known limitations
+- Type III only (Type II needs the `car` package).
+- No residual correlation structures (e.g. AR1) yet; the random intercept implies compound symmetry.
+- No figures for model-based contrasts yet.

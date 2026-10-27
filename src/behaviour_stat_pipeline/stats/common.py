@@ -7,6 +7,8 @@ from typing import Dict, List, Tuple, Optional, Any
 import pandas as pd
 import yaml
 
+from behaviour_stat_pipeline.stats.endpoints.linear_models import validate_model_spec
+
 
 class ConfigError(ValueError):
     """Raised when a config file is malformed or uses unsupported options."""
@@ -52,6 +54,7 @@ _ALLOWED_KEYS = {
     },
     "secondary_two_way_anova.posthoc": {"enabled", "method", "correction", "selected_pairs"},
     "time_to_event": {"enabled", "factors", "duration_col", "correction_across_endpoints", "endpoints"},
+    "linear_models": {"enabled", "rscript", "correction_across_endpoints", "contrast_correction", "models"},
     "correlations": {"enabled", "defaults", "default_groupings", "correction", "min_n", "specs"},
     "correlations.spec": {
         "assay", "x", "y", "name", "method", "groupings", "filter", "covariates", "se", "cluster_col",
@@ -126,6 +129,24 @@ def validate_stats_config(cfg: dict) -> None:
                 f"ANOVA would drop censored animals"
             )
 
+    lm_cfg = cfg.get("linear_models", {}) or {}
+    check_keys(lm_cfg, "linear_models", "linear_models")
+    for key in ("correction_across_endpoints", "contrast_correction"):
+        check_choice(lm_cfg.get(key, "holm"), _MULTITEST_METHODS, f"linear_models.{key}")
+    model_factors = list((cfg.get("design", {}) or {}).get("between_factors", []) or []) + list(
+        (cfg.get("optional", {}) or {}).get("blocking_factors", []) or []
+    )
+    names = []
+    for i, spec in enumerate(lm_cfg.get("models", []) or []):
+        if not isinstance(spec, dict):
+            errors.append(f"linear_models.models[{i}]: expected a mapping")
+            continue
+        errors.extend(validate_model_spec(spec, f"linear_models.models[{i}]", model_factors))
+        names.append(spec.get("name"))
+    dup_names = sorted({n for n in names if n and names.count(n) > 1})
+    if dup_names:
+        errors.append(f"linear_models.models: duplicated model names {dup_names}")
+
     corr = cfg.get("correlations", {}) or {}
     check_keys(corr, "correlations", "correlations")
     check_choice(corr.get("correction", "fdr_bh"), _MULTITEST_METHODS, "correlations.correction")
@@ -192,6 +213,11 @@ class StatsConfig:
     time_to_event_duration_col: Optional[str] = None
     time_to_event_correction: str = "holm"
     time_to_event_endpoints: dict[str, list[str]] = field(default_factory=dict)
+    linear_models_enabled: bool = False
+    linear_models_rscript: Optional[str] = None
+    linear_models_correction: str = "holm"
+    linear_models_contrast_correction: str = "holm"
+    linear_models_models: list[dict] = field(default_factory=list)
     # From the experiment config: assay instance (lower case) -> nominal trial length in s
     trial_durations_s: dict[str, float] = field(default_factory=dict)
     # Set per run from provenance; stamped onto every output table
@@ -272,6 +298,7 @@ def load_stats_config(path: str | Path) -> StatsConfig:
     correlations_default_groupings = list(corr.get("default_groupings", [[]]) or [[]])
 
     tte = cfg.get("time_to_event", {}) or {}
+    lm_cfg = cfg.get("linear_models", {}) or {}
 
 
     return StatsConfig(
@@ -318,6 +345,11 @@ def load_stats_config(path: str | Path) -> StatsConfig:
         time_to_event_duration_col=tte.get("duration_col") or None,
         time_to_event_correction=str(tte.get("correction_across_endpoints", "holm")),
         time_to_event_endpoints=dict(tte.get("endpoints", {}) or {}),
+        linear_models_enabled=bool(lm_cfg.get("enabled", False)),
+        linear_models_rscript=lm_cfg.get("rscript") or None,
+        linear_models_correction=str(lm_cfg.get("correction_across_endpoints", "holm")),
+        linear_models_contrast_correction=str(lm_cfg.get("contrast_correction", "holm")),
+        linear_models_models=list(lm_cfg.get("models", []) or []),
     )
 
 
