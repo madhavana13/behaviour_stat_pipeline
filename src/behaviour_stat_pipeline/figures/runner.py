@@ -118,6 +118,8 @@ def _auto_specs_from_endpoints(
             if not m.empty:
                 row = m.iloc[0]
 
+        if row is None:
+            print(f"WARNING [figures]: no label for {assay.upper()},{endpoint} in labels.csv; axis shows the column name")
         out_specs.append(
             {
                 "name": endpoint,
@@ -196,6 +198,69 @@ def _apply_plot_exclusions(
     return df_plot, _exclusion_summary(applied)
 
 
+def _title_for(spec: Dict[str, Any], defaults: Dict[str, Any], fallback: str):
+    """
+    A title only when asked for: a title string in the figure spec, or defaults.show_title: true
+    (then `fallback`). Otherwise False (no title).
+    """
+    t = spec.get("title", None)
+    if isinstance(t, str) and t.strip():
+        return t
+    if t is False:
+        return False
+    return fallback if bool(defaults.get("show_title", False)) else False
+
+
+def _mask_excluded(
+    df: pd.DataFrame,
+    exclusions: pd.DataFrame | None,
+    *,
+    assay: str,
+    endpoints: List[str],
+    mouse_id_col: str,
+) -> tuple[pd.DataFrame, dict]:
+    """
+    Per-endpoint exclusions for figures that show several endpoints (scatter x/y, multi-panel
+    box plots): an excluded mouse's value is blanked only for the endpoint it is excluded from,
+    exactly as in the statistics.
+    """
+    out = df.copy()
+    applied_all = []
+    if exclusions is not None and not exclusions.empty:
+        for ep in dict.fromkeys(endpoints):
+            if ep not in out.columns:
+                continue
+            _, applied = apply_exclusions_for_endpoint(
+                out, exclusions, assay=assay.upper(), endpoint=ep,
+                analysis_scope="primary", mouse_id_col=mouse_id_col,
+            )
+            if not applied.empty:
+                ids = set(applied["mouse_id"].astype(str))
+                out.loc[out[mouse_id_col].astype(str).isin(ids), ep] = float("nan")
+                applied_all.append(applied)
+    applied = pd.concat(applied_all, ignore_index=True) if applied_all else pd.DataFrame()
+    return out, _exclusion_summary(applied)
+
+
+def _move_superseded(folder: Path, prefix: str, written: List[Path], suffixes=(".png", ".pdf")) -> List[Path]:
+    """
+    Files of this assay that the current run did not produce are moved to <folder>/_superseded/,
+    so old figures never sit next to current ones. Files not named <prefix>_* are left alone.
+    """
+    keep = {Path(p).resolve() for p in written}
+    moved = []
+    for f in sorted(folder.glob(f"{prefix}_*")):
+        if f.is_file() and f.suffix.lower() in suffixes and f.resolve() not in keep:
+            dest = folder / "_superseded"
+            dest.mkdir(exist_ok=True)
+            target = dest / f.name
+            if target.exists():
+                target.unlink()
+            f.rename(target)
+            moved.append(target)
+    return moved
+
+
 def _write_figure_log(log_path: Path, records: list[dict]) -> None:
     log_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -258,9 +323,6 @@ def _auto_scatter_specs_from_correlations(
         x_lab = _label_for_axis(label_map, assay, x) or x
         y_lab = _label_for_axis(label_map, assay, y) or y
 
-        x_title = _label_for_title(label_map, assay, x) or x
-        y_title = _label_for_title(label_map, assay, y) or y
-        auto_title = f"{y_title} vs {x_title}"
 
         out_specs.append(
             {
@@ -271,7 +333,6 @@ def _auto_scatter_specs_from_correlations(
                 "y": y,
                 "x_label": x_lab,
                 "y_label": y_lab,
-                "title": auto_title,
                 "fit": {"enabled": fit_enabled, "by": "pooled"},
             }
         )
@@ -415,6 +476,12 @@ def run_figures_from_config(
     specs = fig_cfg.get("specs", []) or []
     if not isinstance(specs, list):
         raise ValueError("figures.specs must be a list")
+    specs = [dict(s) for s in specs]  # copy: the config's list must not grow with auto specs
+    for i, s in enumerate(specs):
+        if not s.get("name"):
+            mapped = [str(m) for m in ((s.get("wide_to_long") or {}).get("mapping") or {}).values() if m]
+            # A spec for one endpoint takes its name, so it replaces the automatic figure of that endpoint
+            s["name"] = mapped[0] if len(set(mapped)) == 1 else f"{s.get('assay', assay)}_figure_{i}"
 
     auto_specs = _auto_specs_from_endpoints(
         config=config,
@@ -484,16 +551,19 @@ def run_figures_from_config(
 
             if len(unique_mapped_endpoints) == 1:
                 exclusion_endpoint = unique_mapped_endpoints[0]
+                df_plot, excl_info = _apply_plot_exclusions(
+                    df,
+                    exclusions,
+                    assay=assay,
+                    endpoint=exclusion_endpoint,
+                    mouse_id_col=mouse_id_col,
+                )
             else:
-                exclusion_endpoint = name
-
-            df_plot, excl_info = _apply_plot_exclusions(
-                df,
-                exclusions,
-                assay=assay,
-                endpoint=exclusion_endpoint,
-                mouse_id_col=mouse_id_col,
-            )
+                # several endpoints in one figure: exclusions apply per endpoint (as in the statistics)
+                exclusion_endpoint = ";".join(unique_mapped_endpoints)
+                df_plot, excl_info = _mask_excluded(
+                    df, exclusions, assay=assay, endpoints=unique_mapped_endpoints, mouse_id_col=mouse_id_col,
+                )
 
             long_df = _make_long_from_mapping(
                 df_plot,
@@ -545,7 +615,7 @@ def run_figures_from_config(
                 group_order=group_order,
                 sex_order=sex_order,
                 style=style_spec,
-                title=spec.get("title", None),
+                title=_title_for(spec, defaults, _label_for_title(label_map, assay, anova_endpoint or "") or name),
                 y_label=value_label,
                 show=False,
                 anova_df=anova_df,
@@ -576,16 +646,13 @@ def run_figures_from_config(
             fit_cfg = spec.get("fit", {}) or {}
             fit_enabled = bool(fit_cfg.get("enabled", True))
 
-            exclusion_endpoint = name
-
-            df_plot, excl_info = _apply_plot_exclusions(
-                df,
-                exclusions,
-                assay=assay,
-                endpoint=exclusion_endpoint,
-                mouse_id_col=mouse_id_col,
+            exclusion_endpoint = f"{x};{y}"
+            df_plot, excl_info = _mask_excluded(
+                df, exclusions, assay=assay, endpoints=[str(x), str(y)], mouse_id_col=mouse_id_col,
             )
-
+            scatter_style = style_with_overrides(
+                style, {"figure_size": spec.get("figure_size", defaults.get("scatter_figure_size", [3.2, 3.0]))}
+            )
 
             for out_path in out_paths:
                 plot_group_scatter(
@@ -593,17 +660,17 @@ def run_figures_from_config(
                     x=str(x),
                     y=str(y),
                     out_path=str(out_path),
-                    style=style,
+                    style=scatter_style,
                     group_col=group_col,
                     sex_col=sex_col,
                     group_order=group_order,
                     sex_order=spec.get("sex_order", ["female", "male"]),
                     x_label=spec.get("x_label", None) or (_label_for_axis(label_map, assay, str(x)) or str(x)),
                     y_label=spec.get("y_label", None) or (_label_for_axis(label_map, assay, str(y)) or str(y)),
-                    title=spec.get("title", None) or (
+                    title=_title_for(spec, defaults, (
                         f"{_label_for_title(label_map, assay, str(y)) or str(y)} vs "
                         f"{_label_for_title(label_map, assay, str(x)) or str(x)}"
-                    ),
+                    )),
                     fit_enabled=fit_enabled,
                 )
 
@@ -680,5 +747,7 @@ def run_figures_from_config(
             })
     log_path = out_figures.parent / "logs" / f"{output_prefix}_figures_summary.txt"
     _write_figure_log(log_path, figure_log_records)
+    for moved in _move_superseded(out_figures, output_prefix, written):
+        print(f"NOTE [{output_prefix}]: not produced by this run, moved to {moved}")
     
     return written

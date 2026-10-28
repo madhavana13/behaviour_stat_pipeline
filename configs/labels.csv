@@ -2,40 +2,31 @@ assay,endpoint,title,y_label
 LM,distance_moved_in_central_alley,Distance moved in central alley,Distance moved in central alley (m)
 LM,distance_moved_in_narrow_alley,Distance moved in narrow alley,Distance moved in narrow alley (m)
 LM,distance_moved_in_protected_alley,Distance moved in protected alley,Distance moved in protected alley (m)
-
 LM,latency_to_enter_narrow_alley,Latency to enter narrow alley,Latency to enter narrow alley (s)
 LM,latency_to_enter_protected_alley,Latency to enter protected alley,Latency to enter protected alley (s)
 LM,latency_to_re_enter_narrow_alley,Latency to re-enter narrow alley,Latency to re-enter narrow alley (s)
 LM,latency_to_re_enter_protected_alley,Latency to re-enter protected alley,Latency to re-enter protected alley (s)
-
 LM,transitions_into_central_alley,Transitions into central alley,Transitions into central alley (n)
 LM,transitions_into_narrow_alley,Transitions into narrow alley,Transitions into narrow alley (n)
 LM,transitions_into_protected_alley,Transitions into protected alley,Transitions into protected alley (n)
-
 LM,time_in_central_alley,Time in central alley,Time in central alley (s)
 LM,time_in_narrow_alley,Time in narrow alley,Time in narrow alley (s)
 LM,time_in_protected_alley,Time in protected alley,Time in protected alley (s)
-
 EPM,count_head_dips,Number of head dips,Count
 EPM,count_psap,Number of PSAP events,Count
-
 EPM,distance_moved_in_center,Distance moved in center,Distance (m)
 EPM,distance_moved_on_closed_arms,Distance moved on closed arms,Distance (m)
 EPM,distance_moved_on_open_arms,Distance moved on open arms,Distance (m)
-
 EPM,time_head_dipping,Time spent head dipping,Time (s)
 EPM,time_in_center,Time spent in center,Time (s)
 EPM,time_on_closed_arms,Time spent on closed arms,Time (s)
 EPM,time_on_open_arms,Time spent on open arms,Time (s)
 EPM,time_psap,Time spent in PSAP,Time (s)
-
 EPM,total_distance_moved,Total distance moved,Distance (m)
 EPM,total_time_in_arena,Total time in arena,Time (s)
-
 EPM,transitions_into_center,Transitions into center,Number of transitions
 EPM,transitions_into_closed_arms,Transitions into closed arms,Number of transitions
 EPM,transitions_into_open_arms,Transitions into open arms,Number of transitions
-
 NOR,fam_total distance moved,Distance moved during familiarization,Distance (m)
 NOR,fam_total explore time,Exploration time during familiarization,Time (s)
 NOR,test_novel_explore_time,Exploration time of novel object,Time (s)
@@ -44,7 +35,6 @@ NOR,test_novel_iz_time,Interaction zone time with novel object,Time (s)
 NOR,di_explore,Discrimination index (exploration),Index
 NOR,di_iz,Discrimination index (interaction zone),Index
 NOR,test_total distance moved,Total distance moved during test,Distance (m)
-
 assay,endpoint,title,y_label
 OFT,total_distance_moved,Total distance moved,Total distance moved (m)
 OFT,time_in_center,Time spent in center,Time in center (s)
@@ -56,8 +46,6 @@ OFT,classifier__supported_rearing_count,Number of supported rearing events,Suppo
 OFT,classifier__unsupported_rearing_count,Number of unsupported rearing events,Unsupported rearing events
 OFT,classifier__grooming_time,Time spent grooming,Grooming time (s)
 OFT,classifier__grooming_count,Number of grooming events,Grooming events
-
-
 VIT,delta_after_minus_before__standing__is_hand,Change in standing behavior (after − before),Delta (s)
 VIT,hand__Before__time in in right upper quadrant,Time in right upper quadrant (hand before),Time (s)
 VIT,hand__After__time in right lower quadrant,Time in right lower quadrant (hand after),Time (s)
@@ -79,3 +67,46 @@ OFT,supported_rearing_time,Time spent supported rearing,Supported rearing time (
 OFT,supported_rearing_count,Number of supported rearing events,Supported rearing events
 OFT,unsupported_rearing_time,Time spent unsupported rearing,Unsupported rearing time (s)
 OFT,unsupported_rearing_count,Number of unsupported rearing events,Unsupported rearing events
+NOR,fam_total_distance_moved,Distance moved during familiarisation,"Distance moved, familiarisation (m)"
+NOR,fam_total_explore_time,Exploration during familiarisation,"Exploration time, familiarisation (s)"
+NOR,test_total_distance_moved,Distance moved during test,"Distance moved, test (m)"
+NOR,test_total_explore_time,Total exploration during test,"Total exploration time, test (s)"
+VIT,delta_after_minus_before__hand__time_in_right_lower_quadrant,Change in time in right lower quadrant (hand),"After - before, right lower quadrant (s)"
+VIT,hand__After__time_in_right_lower_quadrant,"Time in right lower quadrant, hand, after","Right lower quadrant, after (s)"
+VIT,hand__Before__time_in_right_lower_quadrant,"Time in right lower quadrant, hand, before","Right lower quadrant, before (s)"
+VIT,standing__Before__distance_moved_in_left_lower_quadrant,"Distance in left lower quadrant, standing, before",Left lower quadrant distance (m)
+VIT,standing__Before__distance_moved_in_left_upper_quadrant,"Distance in left upper quadrant, standing, before",Left upper quadrant distance (m)
+VIT,standing__Before__distance_moved_in_right_lower_quadrant,"Distance in right lower quadrant, standing, before",Right lower quadrant distance (m)
+VIT,standing__Before__distance_moved_in_right_upper_quadrant,"Distance in right upper quadrant, standing, before",Right upper quadrant distance (m)
+LM,total_distance_moved,Total distance moved,Total distance moved (m)
+OFT,classifier__digging_time,Time spent digging,Digging time (s)
+OFT,classifier__digging_count,Number of digging events,Digging events (n)
+MISC,left_adrenal_mg,Left adrenal weight,Left adrenal (mg)
+MISC,right_adrenal_mg,Right adrenal weight,Right adrenal (mg)
+MISC,adrenal_total_mg,Total adrenal weight,"Adrenals, total (mg)"
+MISC,left_adrenal_mg_per_g_bw,Left adrenal weight / body weight,Left adrenal (mg/g body weight)
+MISC,right_adrenal_mg_per_g_bw,Right adrenal weight / body weight,Right adrenal (mg/g body weight)
+MISC,adrenal_total_mg_per_g_bw,Total adrenal weight / body weight,"Adrenals, total (mg/g body weight)"
+MISC,rct_total_intake,Total intake (RCT),Total intake
+MISC,rct_pi,Sucrose preference index (RCT),Preference index
+MISC,rct_di,Sucrose discrimination index (RCT),Discrimination index
+MISC,marbles_buried,Marbles buried,Marbles buried (n)
+MISC,immobility_time_s,Immobility time,Immobility time (s)
+MISC,immobility_fraction,Immobility fraction of test,Immobility (fraction of test)
+MISC,immobility_bouts,Immobility bouts,Immobility bouts (n)
+MISC,immobility_mean_bout_len_s,Immobility mean bout length,Immobility mean bout (s)
+MISC,immobility_latency_s,Latency to first immobility,Immobility latency (s)
+MISC,swinging_time_s,Swinging time,Swinging time (s)
+MISC,swinging_fraction,Swinging fraction of test,Swinging (fraction of test)
+MISC,swinging_bouts,Swinging bouts,Swinging bouts (n)
+MISC,swinging_mean_bout_len_s,Swinging mean bout length,Swinging mean bout (s)
+MISC,swinging_latency_s,Latency to first swinging,Swinging latency (s)
+MISC,curling_time_s,Curling time,Curling time (s)
+MISC,curling_fraction,Curling fraction of test,Curling (fraction of test)
+MISC,curling_bouts,Curling bouts,Curling bouts (n)
+MISC,curling_mean_bout_len_s,Curling mean bout length,Curling mean bout (s)
+MISC,curling_latency_s,Latency to first curling,Curling latency (s)
+MISC,total_mobility_time_s,Total mobility time,Total mobility time (s)
+MISC,total_mobility_fraction,Total mobility fraction of test,Total mobility (fraction of test)
+MISC,total_mobility_bouts,Total mobility bouts,Total mobility bouts (n)
+MISC,total_mobility_mean_bout_len_s,Total mobility mean bout length,Total mobility mean bout (s)

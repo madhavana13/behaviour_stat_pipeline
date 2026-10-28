@@ -391,7 +391,10 @@ def plot_group_boxpoints(
                         )          
 
     ax.set_xticks(xticks)
-    ax.set_xticklabels(xticklabels, rotation=0)
+    # One measure per group (e.g. "Total"): the group labels below say everything
+    ax.set_xticklabels(xticklabels if len(x_levels) > 1 else [""] * len(xticks), rotation=0)
+    if len(x_levels) == 1:
+        ax.tick_params(axis="x", length=0)
 
     for g in g_levels:
         block_positions = [positions[(g, x)] for x in x_levels]
@@ -410,9 +413,9 @@ def plot_group_boxpoints(
             color=style.text_color,
         )
 
-    if title is not False:
+    if title:
         ax.set_title(
-            title or f"{assay} — {endpoint}",
+            title,
             fontsize=style.title_fontsize,
             pad=style.title_pad,
             color=style.text_color,
