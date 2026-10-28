@@ -1,4 +1,4 @@
-"""Per-experiment analysis plan: config merge, primary endpoints, frozen-plan check."""
+"""Per-experiment analysis plan: config merge, primary/secondary endpoints, frozen-plan check."""
 
 from __future__ import annotations
 
@@ -18,6 +18,7 @@ from behaviour_stat_pipeline.stats.common import (
     ordered_instances,
     read_groups,
     resolve_config,
+    validate_stats_config,
 )
 from behaviour_stat_pipeline.stats.endpoints.linear_models import assemble_model_data, validate_model_spec
 from behaviour_stat_pipeline.stats.provenance import frozen_plan_status
@@ -62,6 +63,42 @@ def test_endpoint_role_by_instance_type_and_model():
     assert endpoint_role(cfg, "oft2", "total_distance_moved") == "primary"  # declared for the assay type
     assert endpoint_role(cfg, "oft2", "time_in_center") == "exploratory"
     assert endpoint_role(cfg, "sessions", "time_in_center") == "primary"
+
+
+def test_secondary_role_and_overlap_with_primary():
+    e = exp_cfg(
+        secondary_two_way_anova={"endpoints": {"oft": ["total_distance_moved", "time_in_center", "rears"]}},
+        primary_endpoints={"oft": ["time_in_center"]},
+        secondary_endpoints={"oft2": ["total_distance_moved"]},
+    )
+    cfg = load_stats_config(STATS, e)
+    assert endpoint_role(cfg, "oft2", "time_in_center") == "primary"
+    assert endpoint_role(cfg, "oft2", "total_distance_moved") == "secondary"
+    assert endpoint_role(cfg, "oft2", "rears") == "exploratory"
+
+    e["analysis"]["secondary_endpoints"] = {"oft2": ["time_in_center"]}  # also primary via the assay type
+    with pytest.raises(ConfigError, match="both primary_endpoints and secondary_endpoints"):
+        load_stats_config(STATS, e)
+
+
+def test_secondary_endpoint_typo_is_an_error():
+    e = exp_cfg(secondary_two_way_anova={"endpoints": {"oft": ["rears"]}}, secondary_endpoints={"oft": ["rear"]})
+    with pytest.raises(ConfigError, match="secondary_endpoints.oft"):
+        load_stats_config(STATS, e)
+
+
+def test_correction_per_role():
+    cfg = load_stats_config(STATS, exp_cfg())
+    assert cfg.secondary_two_way_anova_correction == {"primary": "holm", "secondary": "fdr_bh", "exploratory": "fdr_bh"}
+    # one method still applies to every role
+    cfg = load_stats_config(STATS, exp_cfg(time_to_event={"correction_across_endpoints": "bonferroni"}))
+    assert set(cfg.time_to_event_correction.values()) == {"bonferroni"}
+    # an experiment may override one role; the others keep the stats.yaml defaults
+    cfg = load_stats_config(STATS, exp_cfg(secondary_two_way_anova={"correction_across_endpoints": {"secondary": "holm"}}))
+    assert cfg.secondary_two_way_anova_correction == {"primary": "holm", "secondary": "holm", "exploratory": "fdr_bh"}
+    # after merging, a mapping must name every role
+    with pytest.raises(ConfigError, match="must name exactly"):
+        validate_stats_config({"secondary_two_way_anova": {"correction_across_endpoints": {"primary": "holm"}}})
 
 
 def timeline_cfg(**instances):

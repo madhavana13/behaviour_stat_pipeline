@@ -6,6 +6,7 @@ groups:                      # single place for group order, display labels and 
   colors: {cup: darkorange, tail: dimgray}
 paths:
   metadata_subjects: data/experiments/EXP-2025-001/metadata/subjects.csv
+  exclusions: data/experiments/EXP-2025-001/metadata/exclusions.csv
   processed_dir: data/experiments/EXP-2025-001/processed
   interim_dir: data/experiments/EXP-2025-001/interim
   out_dir: outputs/EXP-2025-001        # results: <out_dir>/<ASSAY>/{tables,figures,logs}, <out_dir>/MODELS
@@ -16,6 +17,7 @@ raw:
   oft: data/experiments/EXP-2025-001/raw/oft
   epm: data/experiments/EXP-2025-001/raw/epm
   lm: data/experiments/EXP-2025-001/raw/lm
+  sit: data/experiments/EXP-2025-001/raw/sit
 
 assay_patterns:
   vit: "*_output_summary.csv"
@@ -23,6 +25,7 @@ assay_patterns:
   epm: "*_output_summary.csv"
   lm: "*_output_summary.csv"
   nor: "*_output_summary.csv"
+  sit: "*_output_summary.csv"
 
 assay_instances:
   NOR:
@@ -31,6 +34,13 @@ assay_instances:
     fam_pattern: "*FAM*_output_summary.csv"
     test_pattern: "*TEST*_output_summary.csv"
     min_explore_s: 20                      # advisory low-exploration flag (no exclusion)
+  SIT:
+    assay_type: SIT                        # FAM: empty mesh cage, 2 min; TEST: target in cage, 5 min
+    fam_pattern: "*FAM*_output_summary.csv"
+    test_pattern: "*TEST*_output_summary.csv"
+    min_explore_s: 20                      # advisory: FAM + TEST (first 2 min) interaction-zone time
+    test_window_s: 120                     # TEST window behind the "(first 2 min)" export columns
+    target_col: fam_social_animal          # subjects.csv column naming the target mouse -> target_id
   VIT:
     assay_type: VIT
     filename_tokens:                       # token in file name -> value (exactly one must match)
@@ -41,10 +51,10 @@ assay_instances:
 # Analysis plan for this experiment. Merged over configs/stats.yaml, which holds
 # method defaults only; lists here (endpoints, models, specs) replace the shared ones.
 #
-# primary_endpoints: per assay instance/type or linear-model name, the endpoints
-#   that test the experiment's hypotheses. Everything else is reported as
-#   exploratory. Primary and exploratory endpoints are corrected as separate
-#   families (column endpoint_role in every output table).
+# primary_endpoints / secondary_endpoints: per assay instance/type or linear-model
+#   name. Primary = the outcome(s) the sample size was calculated for; secondary =
+#   other preregistered outcomes; everything else is reported as exploratory. Each
+#   role is corrected as a separate family (column endpoint_role in every output table).
 #
 # To show the plan was fixed before analysis: commit this file, then set
 #   analysis_frozen_at: <commit sha>
@@ -58,12 +68,40 @@ analysis:
     - nor
     - oft
     - epm
-  primary_endpoints: {}
+    - sit
+  primary_endpoints: {oft: [time_in_center]}
+  secondary_endpoints:               # from the preregistration (secondary outcomes)
+    oft:                             # time_in_center is the main endpoint -> primary
+      - total_distance_moved
+      - supported_rearing_count
+      - unsupported_rearing_count
+    nor:
+      - test_novel_explore_time      # time exploring each object (test)
+      - test_familiar_explore_time
+      - di_explore                   # discrimination index (exploration-based)
+      - fam_total_distance_moved     # session not specified in the preregistration
+      - test_total_distance_moved
+    epm:
+      - time_on_closed_arms
+      - time_on_open_arms
+      - time_in_center
+      - distance_moved_on_closed_arms
+      - distance_moved_on_open_arms
+      - count_psap
+      - transitions_into_closed_arms
+      - transitions_into_open_arms
+      - count_head_dips              # preregistered as head dips in the open arms
+    sit_target:                      # SIT is reported from the mixed model below (targets shared by mice)
+      - test_time_in_interaction_zone_first2min   # time in the interaction zone (target, first 2 min)
+      - test_total_distance_moved                 # whole 5-min test (no 2-min distance exported)
   primary_one_sample:
     nulls:
       nor:
         di_explore: 0.0
         di_iz: 0.0
+      sit:                           # target (TEST, first 2 min) vs empty cage (FAM)
+        di_iz: 0.0
+        di_explore: 0.0
   diagnostics:
     endpoints:
       # OFT: this experiment's export is the older format (no classifier__ prefix; rearing
@@ -71,6 +109,7 @@ analysis:
       nor:
         - fam_total_explore_time
         - test_novel_explore_time
+        - test_familiar_explore_time
         - test_familiar_iz_time
         - test_novel_iz_time
         - di_explore
@@ -110,6 +149,15 @@ analysis:
         - standing__Before__distance_moved_in_left_upper_quadrant
         - standing__Before__distance_moved_in_right_lower_quadrant
         - standing__Before__distance_moved_in_right_upper_quadrant
+      sit:
+        - di_iz
+        - di_explore
+        - fam_time_in_interaction_zone
+        - test_time_in_interaction_zone_first2min
+        - fam_time_exploring_cage
+        - test_time_exploring_cage_first2min
+        - fam_total_distance_moved
+        - test_total_distance_moved
   secondary_two_way_anova:
     endpoints:
       # OFT: this experiment's export is the older format (no classifier__ prefix; rearing
@@ -117,6 +165,7 @@ analysis:
       nor:
         - fam_total_explore_time
         - test_novel_explore_time
+        - test_familiar_explore_time
         - test_familiar_iz_time
         - test_novel_iz_time
         - di_explore
@@ -156,8 +205,29 @@ analysis:
         - standing__Before__distance_moved_in_left_upper_quadrant
         - standing__Before__distance_moved_in_right_lower_quadrant
         - standing__Before__distance_moved_in_right_upper_quadrant
+      sit:
+        - di_iz
+        - di_explore
+        - fam_time_in_interaction_zone
+        - test_time_in_interaction_zone_first2min
+        - fam_time_exploring_cage
+        - test_time_exploring_cage_first2min
+        - fam_total_distance_moved
+        - test_total_distance_moved
   linear_models:
-    models: []
+    models:
+      # Each target mouse met 4 test mice, all of one group x sex cell (2 targets per cell), so target
+      # is nested in group x sex: a random intercept, not a fixed blocking factor (it would be
+      # confounded with group). Group and sex are then tested against between-target variation.
+      - name: sit_target
+        assays: [sit]
+        endpoints:
+          - di_iz
+          - di_explore
+          - test_time_in_interaction_zone_first2min
+          - test_total_distance_moved
+        fixed: "group * sex"
+        random: "~ 1 | target_id"
   correlations:
     specs:
       - assay: nor

@@ -291,3 +291,69 @@ Checkpoint - Remaining hardcoded / dead / cumbersome parts
 - Figures still read the configuration as a plain dict while the statistics use the typed StatsConfig
   (two representations). Correlation specs and group settings are shared now; a single typed config
   is a larger refactor.
+
+2026-10-28
+Checkpoint - Secondary endpoint role, correction per role, posthoc gating
+
+### Added
+- `analysis.secondary_endpoints` (experiment config): preregistered outcomes that did not set the
+  sample size. `endpoint_role` is now `primary`, `secondary` or `exploratory`; each role is a separate
+  correction family per model term. Declaring an endpoint both primary and secondary, or declaring one
+  that is not analysed, is a config error.
+- `correction_across_endpoints` (ANOVA, time-to-event, linear models) accepts a mapping per role.
+  New defaults in stats.yaml: `{primary: holm, secondary: fdr_bh, exploratory: fdr_bh}`. ANOVA tables
+  now carry `correction_method`.
+- Posthoc gate (`secondary_two_way_anova.posthoc.gate_on_anova`, default true): a comparison is
+  labelled significant only if a corrected ANOVA term involving the compared factor has p_adj < 0.05;
+  otherwise `anova_gate = failed`, label `ns (ANOVA)`.
+
+### Changed (results)
+- Exploratory ANOVA / time-to-event / linear-model endpoints: Holm -> BH-FDR (smaller p_adj).
+- Posthoc comparisons not supported by the corrected ANOVA lose their stars. Example, EXP-2025-001
+  EPM: count_psap and total_distance_moved `group_within_sex_1` (Šidák p = 0.017, 0.016) were
+  labelled <0.05 while the corrected group term was not significant.
+
+### Background
+- Multiple correction was switched on in cf201a2 (2026-07-13: Holm per term across all of an assay's
+  endpoints). Before that, `correction_across_endpoints` defaulted to `none` and ANOVA labels used raw p.
+  That change was not recorded here; it is why e.g. EPM head dips / PSAP stopped being labelled
+  significant.
+
+### Not changed
+- `manual_brackets` labels in configs/figures.yaml are typed by hand and are not checked against any
+  table.
+
+2026-10-28 (b)
+Checkpoint - Social interaction test (SIT) assay
+
+### Added
+- SIT assay (`assays/sit.py`, `SITRunner`): FAM (empty mesh cage, 2 min) and TEST (target mouse,
+  5 min) files matched per mouse, like NOR. `di_iz` / `di_explore` (and `pi_*`) compare the first
+  2 min of TEST (export's "(first 2 min)" columns) with FAM, each as a fraction of tracked time
+  (`total_time_in_arena`; TEST capped at `test_window_s`); positive = preference for the target.
+  Advisory flags for low interaction-zone time and short recordings.
+- `target_col`: subject-metadata column naming the target mouse, copied to `target_id`.
+- `FamTestRunner`: shared FAM/TEST ingestion for NOR and SIT (NOR output unchanged).
+- Raw IDs with `HAB` as the familiarisation token (`..._27A_HAB_ID4`) are parsed.
+- EXP-2025-001: SIT ingestion and analysis plan (one-sample DI vs 0, ANOVA, and the mixed model
+  `sit_target`: group * sex + random intercept per target mouse). Each target met 4 test mice of one
+  group x sex cell (2 targets per cell), so the model, not the ANOVA, is the SIT analysis to report;
+  the preregistered secondary endpoints are declared on it. Exclusions file added
+  (`metadata/exclusions.csv`: 27B_ID14 from `test_total_distance_moved`).
+
+### Fixed
+- `schema_aliases.yaml` had an empty `sit: raw: {}` placeholder that silently replaced any real
+  SIT mapping (duplicate YAML key, last one wins). Schema aliases, and the configs read by
+  `run_assay.py` and `run_figures.py`, are now loaded with the strict loader (duplicate keys are
+  an error), as the stats configs already were. Loader moved to `common/yaml_io.py`.
+
+### Data notes (EXP-2025-001)
+- 32 mice. 27B_ID14's TEST recording is 184.8 s tracked (median 288 s): first-2-min measures
+  and the DI are unaffected; excluded from `test_total_distance_moved`.
+- FAM tracked time is ~109 s (106-110 s), not 120 s; hence the DI on fractions of tracked time.
+- In `sit_target`, sex is confounded with target sex (male test mice met male targets), and group
+  and sex are tested on 4 denominator df (8 targets).
+- Not handled: the one-sample DI tests and the SIT ANOVA treat mice sharing a target as independent.
+
+### Also
+- NOR `test_familiar_explore_time` label added (endpoint added to the NOR analysis lists earlier today).

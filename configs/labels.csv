@@ -110,3 +110,12 @@ MISC,total_mobility_time_s,Total mobility time,Total mobility time (s)
 MISC,total_mobility_fraction,Total mobility fraction of test,Total mobility (fraction of test)
 MISC,total_mobility_bouts,Total mobility bouts,Total mobility bouts (n)
 MISC,total_mobility_mean_bout_len_s,Total mobility mean bout length,Total mobility mean bout (s)
+NOR,test_familiar_explore_time,Exploration time of familiar object,Time (s)
+SIT,di_iz,Social discrimination index (interaction zone),"DI, target vs empty cage"
+SIT,di_explore,Social discrimination index (cage exploration),"DI, target vs empty cage"
+SIT,fam_time_in_interaction_zone,"Interaction zone time, empty cage","Interaction zone, empty cage (s)"
+SIT,test_time_in_interaction_zone_first2min,"Interaction zone time, target (first 2 min)","Interaction zone, target (s)"
+SIT,fam_time_exploring_cage,"Cage exploration, empty cage","Cage exploration, empty cage (s)"
+SIT,test_time_exploring_cage_first2min,"Cage exploration, target (first 2 min)","Cage exploration, target (s)"
+SIT,fam_total_distance_moved,Distance moved during familiarisation,"Distance moved, familiarisation (m)"
+SIT,test_total_distance_moved,Distance moved during test,"Distance moved, test (m)"

@@ -1,10 +1,10 @@
 import argparse
 from pathlib import Path
 
-import yaml
 
 from behaviour_stat_pipeline.assays.registry import RUNNER_REGISTRY, RunContext
 from behaviour_stat_pipeline.common.schema import load_schema_aliases
+from behaviour_stat_pipeline.common.yaml_io import load_yaml_strict
 from behaviour_stat_pipeline.stats.common import ConfigError, read_groups, require_repo_root
 REPO_ROOT = Path(__file__).resolve().parents[1]
 schema_aliases = load_schema_aliases(REPO_ROOT / "configs" / "schema_aliases.yaml")
@@ -33,8 +33,7 @@ def build_parser() -> argparse.ArgumentParser:
 def load_yaml(path: str) -> dict:
     if not path:
         return {}
-    with open(path, "r", encoding="utf-8") as f:
-        return yaml.safe_load(f) or {}
+    return load_yaml_strict(path)
 
 def resolve_assay_identity(args: argparse.Namespace, exp_cfg: dict) -> tuple[str, str, str]:
     """

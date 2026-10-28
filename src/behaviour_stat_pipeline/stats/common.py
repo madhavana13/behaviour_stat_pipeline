@@ -5,38 +5,9 @@ from pathlib import Path
 from typing import Dict, List, Tuple, Optional, Any
 
 import pandas as pd
-import yaml
 
+from behaviour_stat_pipeline.common.yaml_io import ConfigError, load_yaml_strict  # noqa: F401 (re-exported)
 from behaviour_stat_pipeline.stats.endpoints.linear_models import validate_model_spec
-
-
-class ConfigError(ValueError):
-    """Raised when a config file is malformed or uses unsupported options."""
-
-
-class _UniqueKeyLoader(yaml.SafeLoader):
-    """SafeLoader that rejects duplicate mapping keys instead of silently keeping the last one."""
-
-
-def _construct_unique_mapping(loader: _UniqueKeyLoader, node: yaml.MappingNode, deep: bool = False):
-    seen = set()
-    for key_node, _ in node.value:
-        key = loader.construct_object(key_node, deep=deep)
-        if key in seen:
-            raise ConfigError(
-                f"Duplicate key {key!r} in {node.start_mark.name}, line {key_node.start_mark.line + 1}"
-            )
-        seen.add(key)
-    return loader.construct_mapping(node, deep=deep)
-
-
-_UniqueKeyLoader.add_constructor(yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, _construct_unique_mapping)
-
-
-def load_yaml_strict(path: str | Path) -> dict:
-    """Load YAML, failing on duplicate keys."""
-    with Path(path).open("r", encoding="utf-8") as f:
-        return yaml.load(f, Loader=_UniqueKeyLoader) or {}
 
 
 # Keys accepted in each stats section. Anything else is a typo or an unsupported
@@ -55,7 +26,9 @@ _ALLOWED_KEYS = {
         "enabled", "type", "include_interaction", "factors", "correction_across_endpoints",
         "factor_orders", "endpoints", "posthoc",
     },
-    "secondary_two_way_anova.posthoc": {"enabled", "method", "correction", "selected_pairs", "comparisons"},
+    "secondary_two_way_anova.posthoc": {
+        "enabled", "method", "correction", "gate_on_anova", "selected_pairs", "comparisons",
+    },
     "time_to_event": {"enabled", "factors", "duration_col", "correction_across_endpoints", "endpoints"},
     "linear_models": {"enabled", "rscript", "correction_across_endpoints", "contrast_correction", "models"},
     "correlations": {"enabled", "defaults", "default_groupings", "correction", "min_n", "specs"},
@@ -68,17 +41,30 @@ _ALLOWED_KEYS = {
 # subjects / factors / paths / misc are read by ingestion and figures.
 _TOP_LEVEL_KEYS = {
     "id_cols", "paths", "subjects", "factors", "design", "optional", "assays", "primary_endpoints",
-    "primary_one_sample", "diagnostics", "secondary_two_way_anova", "time_to_event", "linear_models",
+    "secondary_endpoints", "primary_one_sample", "diagnostics", "secondary_two_way_anova", "time_to_event", "linear_models",
     "correlations", "misc",
 }
 
 _MULTITEST_METHODS = {"none", "bonferroni", "holm", "sidak", "fdr_bh", "fdr_by"}
 
+# Each role is its own correction family (column endpoint_role in every output table)
+ENDPOINT_ROLES = ("primary", "secondary", "exploratory")
+
+
+def role_corrections(value: Any) -> dict[str, str]:
+    """
+    correction_across_endpoints -> {role: method}. A single method applies to every role;
+    a mapping must name every role, e.g. {primary: holm, secondary: fdr_bh, exploratory: fdr_bh}.
+    """
+    if isinstance(value, dict):
+        return {str(k).lower(): str(v).lower() for k, v in value.items()}
+    return {role: str(value).lower() for role in ENDPOINT_ROLES}
+
 
 # Sections an experiment's `analysis:` block may set. stats.yaml holds method
 # defaults; the experiment decides what is analysed and what is primary.
 _ANALYSIS_KEYS = {
-    "assays", "design", "primary_endpoints", "primary_one_sample", "diagnostics",
+    "assays", "design", "primary_endpoints", "secondary_endpoints", "primary_one_sample", "diagnostics",
     "secondary_two_way_anova", "time_to_event", "linear_models", "correlations",
 }
 
@@ -118,20 +104,36 @@ def analysis_endpoints(cfg: dict, key: str, instance_types: dict[str, str]) -> s
     return out
 
 
-def validate_primary_endpoints(cfg: dict, instance_types: dict[str, str]) -> list[str]:
-    """Every declared primary endpoint must be analysed somewhere (catches typos)."""
+def validate_endpoint_roles(cfg: dict, instance_types: dict[str, str]) -> list[str]:
+    """
+    Every declared primary or secondary endpoint must be analysed somewhere (catches typos),
+    and no endpoint may be declared both primary and secondary.
+    """
     errors = []
-    primary = cfg.get("primary_endpoints", {}) or {}
-    if not isinstance(primary, dict):
-        return ["primary_endpoints: expected a mapping of assay instance or model name -> endpoint list"]
-    for key, eps in primary.items():
-        analysed = analysis_endpoints(cfg, str(key), instance_types)
-        missing = sorted(set(eps or []) - analysed)
-        if missing:
-            errors.append(
-                f"primary_endpoints.{key}: {missing} are not analysed for '{key}' "
-                f"(not in primary_one_sample.nulls, secondary_two_way_anova/time_to_event endpoints or a model named '{key}')"
-            )
+    declared: dict[str, dict[str, set[str]]] = {}
+    for section in ("primary_endpoints", "secondary_endpoints"):
+        roles = cfg.get(section, {}) or {}
+        if not isinstance(roles, dict):
+            errors.append(f"{section}: expected a mapping of assay instance or model name -> endpoint list")
+            continue
+        by_type: dict[str, set[str]] = {}
+        for key, eps in roles.items():
+            analysed = analysis_endpoints(cfg, str(key), instance_types)
+            missing = sorted(set(eps or []) - analysed)
+            if missing:
+                errors.append(
+                    f"{section}.{key}: {missing} are not analysed for '{key}' "
+                    f"(not in primary_one_sample.nulls, secondary_two_way_anova/time_to_event endpoints or a model named '{key}')"
+                )
+            k = str(key).lower()
+            by_type.setdefault(instance_types.get(k, k), set()).update(eps or [])
+        declared[section] = by_type
+
+    primary, secondary = declared.get("primary_endpoints", {}), declared.get("secondary_endpoints", {})
+    for key in sorted(set(primary) & set(secondary)):
+        both = sorted(primary[key] & secondary[key])
+        if both:
+            errors.append(f"{key}: {both} are declared in both primary_endpoints and secondary_endpoints")
     return errors
 
 
@@ -158,6 +160,14 @@ def validate_stats_config(cfg: dict) -> None:
         if str(value).lower() not in choices:
             errors.append(f"{where}: {value!r} not supported; choose one of {sorted(choices)}")
 
+    def check_role_corrections(value: Any, where: str) -> None:
+        if isinstance(value, dict):
+            keys = {str(k).lower() for k in value}
+            if keys != set(ENDPOINT_ROLES):
+                errors.append(f"{where}: a per-role mapping must name exactly {list(ENDPOINT_ROLES)}; got {sorted(keys)}")
+        for role, method in role_corrections(value).items():
+            check_choice(method, _MULTITEST_METHODS, f"{where}.{role}" if isinstance(value, dict) else where)
+
     def check_endpoint_lists(by_assay: Any, where: str) -> None:
         for assay, eps in (by_assay or {}).items():
             eps = list(eps or [])
@@ -179,9 +189,8 @@ def validate_stats_config(cfg: dict) -> None:
     sec = cfg.get("secondary_two_way_anova", {}) or {}
     check_keys(sec, "secondary_two_way_anova", "secondary_two_way_anova")
     check_choice(sec.get("type", 3), {"2", "3"}, "secondary_two_way_anova.type")
-    check_choice(
-        sec.get("correction_across_endpoints", "none"), _MULTITEST_METHODS,
-        "secondary_two_way_anova.correction_across_endpoints",
+    check_role_corrections(
+        sec.get("correction_across_endpoints", "none"), "secondary_two_way_anova.correction_across_endpoints",
     )
     check_endpoint_lists(sec.get("endpoints"), "secondary_two_way_anova.endpoints")
     posthoc = sec.get("posthoc", {}) or {}
@@ -207,9 +216,8 @@ def validate_stats_config(cfg: dict) -> None:
 
     tte = cfg.get("time_to_event", {}) or {}
     check_keys(tte, "time_to_event", "time_to_event")
-    check_choice(
-        tte.get("correction_across_endpoints", "holm"), _MULTITEST_METHODS,
-        "time_to_event.correction_across_endpoints",
+    check_role_corrections(
+        tte.get("correction_across_endpoints", "holm"), "time_to_event.correction_across_endpoints",
     )
     check_endpoint_lists(tte.get("endpoints"), "time_to_event.endpoints")
     # A censored latency must not also be analysed as if missing at random
@@ -223,8 +231,8 @@ def validate_stats_config(cfg: dict) -> None:
 
     lm_cfg = cfg.get("linear_models", {}) or {}
     check_keys(lm_cfg, "linear_models", "linear_models")
-    for key in ("correction_across_endpoints", "contrast_correction"):
-        check_choice(lm_cfg.get(key, "holm"), _MULTITEST_METHODS, f"linear_models.{key}")
+    check_role_corrections(lm_cfg.get("correction_across_endpoints", "holm"), "linear_models.correction_across_endpoints")
+    check_choice(lm_cfg.get("contrast_correction", "holm"), _MULTITEST_METHODS, "linear_models.contrast_correction")
     model_factors = list((cfg.get("design", {}) or {}).get("between_factors", []) or []) + list(
         (cfg.get("optional", {}) or {}).get("blocking_factors", []) or []
     )
@@ -291,7 +299,7 @@ class StatsConfig:
     secondary_two_way_anova_include_interaction: bool
     secondary_two_way_anova_typ: int
     secondary_two_way_anova_endpoints: dict[str, list[str]]
-    secondary_two_way_anova_correction: str
+    secondary_two_way_anova_correction: dict[str, str]   # endpoint role -> method
     secondary_two_way_anova_posthoc: dict
     secondary_two_way_anova_factor_orders: dict[str, list[str]]
     correlations_enabled: bool
@@ -303,17 +311,19 @@ class StatsConfig:
     time_to_event_enabled: bool = False
     time_to_event_factors: list[str] = field(default_factory=lambda: ["group", "sex"])
     time_to_event_duration_col: Optional[str] = None
-    time_to_event_correction: str = "holm"
+    time_to_event_correction: dict[str, str] = field(default_factory=lambda: role_corrections("holm"))
     time_to_event_endpoints: dict[str, list[str]] = field(default_factory=dict)
     linear_models_enabled: bool = False
     linear_models_rscript: Optional[str] = None
-    linear_models_correction: str = "holm"
+    linear_models_correction: dict[str, str] = field(default_factory=lambda: role_corrections("holm"))
     linear_models_contrast_correction: str = "holm"
     linear_models_models: list[dict] = field(default_factory=list)
     # From the experiment config: assay instance (lower case) -> nominal trial length in s
     trial_durations_s: dict[str, float] = field(default_factory=dict)
-    # assay instance or model name (lower case) -> primary endpoints; everything else is exploratory
+    # assay instance or model name (lower case) -> primary / secondary (e.g. preregistered) endpoints;
+    # everything else is exploratory
     primary_endpoints: dict[str, list[str]] = field(default_factory=dict)
+    secondary_endpoints: dict[str, list[str]] = field(default_factory=dict)
     # assay instance (lower case) -> assay type (lower case), e.g. oft2 -> oft
     instance_types: dict[str, str] = field(default_factory=dict)
     # From the experiment config: position of each assay instance in the test battery
@@ -365,7 +375,7 @@ def load_stats_config(path: str | Path, experiment_config: Optional[dict] = None
             f"secondary_two_way_anova.factor_orders.{group_col} is set; group order belongs in the "
             f"experiment config (groups.order) only"
         )
-    plan_errors = validate_primary_endpoints(cfg, instance_types)
+    plan_errors = validate_endpoint_roles(cfg, instance_types)
     if plan_errors:
         raise ConfigError("Invalid analysis plan:\n  - " + "\n  - ".join(plan_errors))
 
@@ -398,7 +408,7 @@ def load_stats_config(path: str | Path, experiment_config: Optional[dict] = None
     secondary_two_way_anova_include_interaction = bool(sec.get("include_interaction", True))
     secondary_two_way_anova_typ = int(sec.get("type", 3))
     secondary_two_way_anova_endpoints = dict(sec.get("endpoints", {}))
-    secondary_two_way_anova_correction = str(sec.get("correction_across_endpoints", "none"))
+    secondary_two_way_anova_correction = role_corrections(sec.get("correction_across_endpoints", "none"))
     secondary_two_way_anova_posthoc = dict(sec.get("posthoc", {}))
     secondary_two_way_anova_factor_orders = dict(sec.get("factor_orders", {}) or {})
     if group_order:
@@ -475,15 +485,18 @@ def load_stats_config(path: str | Path, experiment_config: Optional[dict] = None
         time_to_event_enabled=bool(tte.get("enabled", False)),
         time_to_event_factors=list(tte.get("factors", ["group", "sex"])),
         time_to_event_duration_col=tte.get("duration_col") or None,
-        time_to_event_correction=str(tte.get("correction_across_endpoints", "holm")),
+        time_to_event_correction=role_corrections(tte.get("correction_across_endpoints", "holm")),
         time_to_event_endpoints=dict(tte.get("endpoints", {}) or {}),
         linear_models_enabled=bool(lm_cfg.get("enabled", False)),
         linear_models_rscript=lm_cfg.get("rscript") or None,
-        linear_models_correction=str(lm_cfg.get("correction_across_endpoints", "holm")),
+        linear_models_correction=role_corrections(lm_cfg.get("correction_across_endpoints", "holm")),
         linear_models_contrast_correction=str(lm_cfg.get("contrast_correction", "holm")),
         linear_models_models=list(lm_cfg.get("models", []) or []),
         primary_endpoints={
             str(k).lower(): list(v or []) for k, v in (cfg.get("primary_endpoints", {}) or {}).items()
+        },
+        secondary_endpoints={
+            str(k).lower(): list(v or []) for k, v in (cfg.get("secondary_endpoints", {}) or {}).items()
         },
         instance_types=instance_types,
         instance_order=instance_order,
@@ -640,12 +653,15 @@ def ordered_instances(cfg: StatsConfig, instances: list[str], *, baseline: Optio
 
 
 def endpoint_role(cfg: StatsConfig, key: str, endpoint: str) -> str:
-    """'primary' if declared in the experiment's primary_endpoints (by instance, assay type or model), else 'exploratory'."""
+    """
+    'primary' / 'secondary' if declared in the experiment's primary_endpoints / secondary_endpoints
+    (by instance, assay type or model), else 'exploratory'.
+    """
     k = key.lower()
     keys = {k, cfg.instance_types.get(k, k)}
-    for kk in keys:
-        if endpoint in cfg.primary_endpoints.get(kk, []):
-            return "primary"
+    for role, declared in (("primary", cfg.primary_endpoints), ("secondary", cfg.secondary_endpoints)):
+        if any(endpoint in declared.get(kk, []) for kk in keys):
+            return role
     return "exploratory"
 
 

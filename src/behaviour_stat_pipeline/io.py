@@ -13,7 +13,7 @@ from behaviour_stat_pipeline.common.schema import load_schema_aliases, normalize
 
 
 _MOUSE_ID_PATTERNS = [
-    re.compile(r"(?P<cage>\d+[A-Z]?)_(?:FAM|TEST)_ID(?P<num>\d+)\b", re.IGNORECASE),
+    re.compile(r"(?P<cage>\d+[A-Z]?)_(?:FAM|HAB|TEST)_ID(?P<num>\d+)\b", re.IGNORECASE),
     re.compile(r"(?P<cage>\d+[A-Z]?)_ID(?P<num>\d+)\b", re.IGNORECASE),
 ]
 

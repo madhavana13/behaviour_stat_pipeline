@@ -55,7 +55,7 @@ from behaviour_stat_pipeline.stats.endpoints.linear_models import (
     fit_models_r,
 )
 from behaviour_stat_pipeline.stats.diagnostics import endpoint_diagnostics, rout_diagnostics
-from behaviour_stat_pipeline.stats.corrections import adjust_pvalues
+from behaviour_stat_pipeline.stats.corrections import adjust_by_role, adjust_pvalues, posthoc_gate
 from behaviour_stat_pipeline.stats.provenance import build_provenance, frozen_plan_status, write_provenance
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -418,15 +418,8 @@ def run_anova(df: pd.DataFrame, cfg, assay: str, exclusions: pd.DataFrame, scope
 
     aov = pd.concat(frames, ignore_index=True)
 
-    # Primary and exploratory endpoints are separate correction families
-    method = cfg.secondary_two_way_anova_correction
-    if method.lower() != "none":
-        aov["p_adj"] = aov.groupby(["term", "endpoint_role"])["p_value"].transform(
-            lambda s: adjust_pvalues(s, method=method)
-        )
-    else:
-        aov["p_adj"] = aov["p_value"]
-
+    # Per term, primary / secondary / exploratory endpoints are separate correction families
+    aov["p_adj"], aov["correction_method"] = adjust_by_role(aov, ["term"], cfg.secondary_two_way_anova_correction)
     aov["significance_label"] = aov["p_adj"].apply(_significance_label)
 
     out_path = cfg.out_tables / f"{assay.upper()}_secondary_two_way_anova{_scope_suffix(scope)}.csv"
@@ -436,7 +429,9 @@ def run_anova(df: pd.DataFrame, cfg, assay: str, exclusions: pd.DataFrame, scope
     return aov
 
 
-def run_posthoc(df: pd.DataFrame, cfg, assay: str, exclusions: pd.DataFrame, scope: str = "primary") -> None:
+def run_posthoc(
+    df: pd.DataFrame, cfg, assay: str, exclusions: pd.DataFrame, aov: pd.DataFrame | None, scope: str = "primary",
+) -> None:
     posthoc_cfg = getattr(cfg, "secondary_two_way_anova_posthoc", {}) or {}
     if not posthoc_cfg or not posthoc_cfg.get("enabled", True):
         return
@@ -481,6 +476,12 @@ def run_posthoc(df: pd.DataFrame, cfg, assay: str, exclusions: pd.DataFrame, sco
         return
 
     df_posthoc = pd.concat(posthoc_frames, ignore_index=True)
+
+    # A comparison is reported as significant only if the corrected ANOVA supports it:
+    # some term involving the compared factor (main effect or interaction) has p_adj < 0.05.
+    if posthoc_cfg.get("gate_on_anova", True):
+        df_posthoc["anova_gate"] = posthoc_gate(df_posthoc, aov)
+        df_posthoc.loc[df_posthoc["anova_gate"] == "failed", "significance_label"] = "ns (ANOVA)"
 
     out_path = cfg.out_tables / f"{assay.upper()}_secondary_posthoc_cellmeans{_scope_suffix(scope)}.csv"
     write_table(df_posthoc, out_path, cfg)
@@ -534,11 +535,7 @@ def run_time_to_event_stage(df: pd.DataFrame, cfg, assay: str, exclusions: pd.Da
         summary_frames.append(summary)
 
     out = pd.concat(test_frames, ignore_index=True)
-    method = cfg.time_to_event_correction
-    out["p_adj"] = out.groupby(["term", "endpoint_role"])["p_value"].transform(
-        lambda s: adjust_pvalues(s, method=method)
-    )
-    out["correction_method"] = method
+    out["p_adj"], out["correction_method"] = adjust_by_role(out, ["term"], cfg.time_to_event_correction)
     out["significance_label"] = out["p_adj"].apply(_significance_label)
 
     out_path = cfg.out_tables / f"{assay.upper()}_time_to_event{_scope_suffix(scope)}.csv"
@@ -646,11 +643,7 @@ def run_linear_models_stage(
         aov = out["anova"]
         if not aov.empty:
             aov = aov[aov["term"] != "(Intercept)"].copy()
-            method = cfg.linear_models_correction
-            aov["p_adj"] = aov.groupby(["term", "endpoint_role"])["p_value"].transform(
-                lambda s: adjust_pvalues(s, method=method)
-            )
-            aov["correction_method"] = method
+            aov["p_adj"], aov["correction_method"] = adjust_by_role(aov, ["term"], cfg.linear_models_correction)
             aov["significance_label"] = aov["p_adj"].apply(_significance_label)
             out["anova"] = aov
 
@@ -948,16 +941,16 @@ def main() -> None:
         df = prepare_analysis_df(df, subjects, assay_cfg, assay)
 
         run_primary_tests(df, assay_cfg, assay, exclusions)
-        run_anova(df, assay_cfg, assay, exclusions)
-        run_posthoc(df, assay_cfg, assay, exclusions)
+        aov = run_anova(df, assay_cfg, assay, exclusions)
+        run_posthoc(df, assay_cfg, assay, exclusions, aov)
         run_time_to_event_stage(df, assay_cfg, assay, exclusions)
 
         # Sensitivity analysis: same tests with the sensitivity exclusion set, when it differs
         if scopes_differ(exclusions, assay):
             print(f"[{assay_key}] exclusions differ between primary and sensitivity: running sensitivity analysis")
             run_primary_tests(df, assay_cfg, assay, exclusions, scope="sensitivity")
-            run_anova(df, assay_cfg, assay, exclusions, scope="sensitivity")
-            run_posthoc(df, assay_cfg, assay, exclusions, scope="sensitivity")
+            aov = run_anova(df, assay_cfg, assay, exclusions, scope="sensitivity")
+            run_posthoc(df, assay_cfg, assay, exclusions, aov, scope="sensitivity")
             run_time_to_event_stage(df, assay_cfg, assay, exclusions, scope="sensitivity")
         run_diagnostics(df, assay_cfg, assay, exclusions)
         run_exploratory(df, assay_cfg, assay, exclusions)

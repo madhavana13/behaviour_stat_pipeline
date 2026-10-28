@@ -25,7 +25,9 @@ python scripts/run_assay.py --assay oft4 --config $cfg --experiment-config $exp
 python scripts/run_assay.py --assay misc --config $cfg --experiment-config $exp
 python scripts/run_assay.py --assay spl  --config $cfg --experiment-config $exp   (sucrose splash test; same parameters as OFT;
                                                                                  needs an SPL entry in assay_instances, see guide section 4)
-(EXP-2025-001 also has: --assay epm, --assay oft)
+(EXP-2025-001 also has: --assay epm, --assay oft, --assay sit)
+python scripts/run_assay.py --assay sit  --config $cfg --experiment-config $exp   (social interaction; FAM = empty cage,
+                                                                                 TEST = target; DI uses TEST first 2 min)
 
 
 =====================================================================
@@ -92,10 +94,12 @@ docs/changelog.md                  every change that affects results
 6. ANALYSIS PLAN (in $exp, under analysis:)
 =====================================================================
 
-Declare primary endpoints (everything else = exploratory, corrected separately):
+Declare primary and secondary (preregistered) endpoints; everything else = exploratory.
+Each role is corrected separately (stats.yaml: primary holm, secondary/exploratory fdr_bh):
     analysis:
       primary_endpoints:
         nor: [di_explore]
+      secondary_endpoints:
         oft_post_sessions: [total_distance_moved]     # linear model name
 
 Order of tests (needed for stacked sessions / baselines; never inferred from names):

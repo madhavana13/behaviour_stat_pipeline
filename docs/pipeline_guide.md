@@ -58,7 +58,7 @@ outputs/<EXP>/                  = paths.out_dir of the experiment
   MODELS/tables/   MODELS/logs/                         linear / mixed models
   exploratory/                                          output of scripts/exploratory/ (not validated)
 src/behaviour_stat_pipeline/
-  assays/        ingestion per assay type (registry.py: VIT, OFT, SPL, EPM, NOR, LM, MISC)
+  assays/        ingestion per assay type (registry.py: VIT, OFT, SPL, EPM, NOR, SIT, LM, MISC)
   common/        schema normalisation, exclusions, QC
   stats/         statistics; stats/endpoints/ one module per analysis; stats/r/ optional R backend
   figures/       box plots, scatter, Kaplan-Meier
@@ -123,6 +123,7 @@ assay_instances:                     # every test that was run, by the name used
 analysis:                            # THE ANALYSIS PLAN - see section 5
   assays: [vit, nor, oft1, oft2, oft3, oft4, lm, misc]
   primary_endpoints: {...}
+  secondary_endpoints: {...}
   primary_one_sample: {nulls: {...}}
   diagnostics: {endpoints: {...}}
   secondary_two_way_anova: {endpoints: {...}}
@@ -170,6 +171,8 @@ the code:
   `fam_pattern` / `test_pattern` (which files are the familiarisation and test sessions),
   `min_explore_s`. The familiar object is the one with non-zero values in FAM; in TEST exactly
   one copy of each object may carry data.
+- **SIT**: `fam_pattern` / `test_pattern` as for NOR, `test_window_s`, `target_col`,
+  `min_explore_s`, `min_tracked_fraction` (see below).
 - **VIT**: `filename_tokens` maps parts of the file name to timepoint and phase; a file name that
   matches none or several tokens is an error.
 - **All**: `classifier_pattern` for behaviour-classifier reports.
@@ -194,6 +197,53 @@ analysis:
       spl: [classifier__grooming_time, classifier__grooming_count, total_distance_moved]
 ```
 
+**Social interaction test (SIT)** is ingested like NOR: one FAM file (empty mesh cage, 2 min)
+and one TEST file (target mouse in the cage, 5 min) per cohort, matched per mouse. Raw IDs may
+use `FAM` or `HAB` for the familiarisation session.
+
+- Discrimination index, like NOR with the empty cage as "familiar" and the target as "novel",
+  computed on fractions of tracked time because tracked time differs between sessions (FAM is
+  ~110 s of a nominal 120 s):
+  `target = TEST_iz_first2min / min(test_window_s, TEST total_time_in_arena)`,
+  `empty = FAM_iz / FAM total_time_in_arena`, `di_iz = (target - empty) / (target + empty)`;
+  `di_explore` the same with cage-exploration time; `pi_*` = target / (target + empty). Positive =
+  preference for the target. Only the first 2 min of TEST are used (the export's `(first 2 min)`
+  columns). Both fractions are kept (`fam_*_fraction`, `test_*_first2min_fraction`). Undefined
+  (not 0) when both sides are 0.
+- `target_col` copies the subject-metadata column naming the target mouse to `target_id`. A target
+  usually meets several test mice, often all from one group x sex cell; then target is nested in
+  the design and belongs in a mixed model as a random intercept (`random: "~ 1 | target_id"`),
+  not as a fixed blocking factor (confounded with group).
+- All raw measures are kept as `fam_*` / `test_*` (5-min TEST measures without the suffix).
+- Advisory flags (nothing is dropped): `iz_low_explore` (FAM + TEST first-2-min interaction-zone
+  time < `min_explore_s`), `fam_short_recording` / `test_short_recording` (tracked time below
+  `min_tracked_fraction` x the session median, e.g. a recording that stopped early).
+
+```yaml
+raw:
+  sit: data/experiments/<EXP>/raw/sit
+assay_instances:
+  SIT:
+    assay_type: SIT
+    fam_pattern: "*FAM*_output_summary.csv"
+    test_pattern: "*TEST*_output_summary.csv"
+    test_window_s: 120
+    target_col: social_animal      # subjects.csv column naming the target mouse
+    min_explore_s: 20
+analysis:
+  assays: [..., sit]
+  primary_one_sample:
+    nulls:
+      sit: {di_iz: 0.0, di_explore: 0.0}
+  secondary_two_way_anova:
+    endpoints:
+      sit: [di_iz, di_explore, test_time_in_interaction_zone_first2min, test_total_distance_moved]
+  linear_models:
+    models:
+      - {name: sit_target, assays: [sit], fixed: "group * sex", random: "~ 1 | target_id",
+         endpoints: [di_iz, di_explore, test_time_in_interaction_zone_first2min]}
+```
+
 Grooming is the main SPL outcome. If a *latency to first groom* is exported, analyse it under
 `time_to_event` (mice that never groom are censored), not in the ANOVA.
 
@@ -213,22 +263,39 @@ Grooming is the main SPL outcome. If a *latency to first groom* is exported, ana
 | `correlations.specs` | x–y pairs (always exploratory) |
 | `diagnostics.endpoints` | distribution, variance and outlier checks (descriptive) |
 | `primary_endpoints` | which of the above test the experiment's hypotheses |
+| `secondary_endpoints` | preregistered outcomes that did not set the sample size |
 
-### 5.2 Primary vs exploratory
+### 5.2 Primary, secondary and exploratory
 
-Every output table has `endpoint_role` = `primary` or `exploratory`. Multiple-comparison corrections
-across endpoints are computed **within role**: the few primary endpoints form their own family, so
-they are not penalised by dozens of exploratory endpoints, and exploratory results are clearly
-labelled. With no `primary_endpoints` declared, everything is exploratory.
+Every output table has `endpoint_role` = `primary`, `secondary` or `exploratory`:
+
+| Role | What | Declared in | Correction across endpoints (default) |
+|---|---|---|---|
+| primary | the outcome(s) the sample size was calculated for | `primary_endpoints` | Holm |
+| secondary | other preregistered outcomes | `secondary_endpoints` | Benjamini-Hochberg FDR |
+| exploratory | everything else analysed | (nothing) | Benjamini-Hochberg FDR |
+
+Each role is its own correction family, per model term (group, sex, interaction separately), so
+primary endpoints are not penalised by secondary ones, and preregistered secondary endpoints are not
+penalised by extra exploratory ones. Copy the preregistration's lists here; keep outcomes that are
+not outcomes (e.g. `total_time_in_arena`) out of the analysis lists altogether.
 
 ```yaml
 analysis:
   primary_endpoints:
-    nor: [di_explore]                         # by assay instance or type
+    oft: [time_in_center]                     # by assay instance or type
+  secondary_endpoints:
+    epm: [count_psap, count_head_dips, time_on_open_arms]
     oft_post_sessions: [total_distance_moved] # by linear-model name
 ```
 
-A primary endpoint that is not actually analysed for that assay/model is a config error.
+An endpoint declared but not analysed for that assay/model, or declared both primary and secondary,
+is a config error. Methods per role are set in `configs/stats.yaml`
+(`correction_across_endpoints: {primary: holm, secondary: fdr_bh, exploratory: fdr_bh}`); an
+experiment may override one role. Why these defaults: Holm controls the chance of any false
+positive, which suits the confirmatory claim; FDR controls the share of false positives among the
+significant results, which suits a profile of supporting outcomes. If a secondary result is to be
+presented as a finding in its own right, it should be primary.
 
 ### 5.3 Freezing the plan
 
@@ -276,12 +343,12 @@ the animal.
 | Analysis | Question | Test | Output (`outputs/<EXP>/<ASSAY>/tables/`) | Correction |
 |---|---|---|---|---|
 | One-sample | does a group differ from a fixed value (e.g. DI ≠ 0)? | t-test (+ Wilcoxon), 95% CI | `<ASSAY>_primary_one_sample.csv` | Holm across groups per endpoint |
-| Two-way ANOVA | group, sex, group x sex | OLS, Type II (config) | `<ASSAY>_secondary_two_way_anova.csv` | Holm across endpoints per term, within role |
-| Posthoc | which cells differ? | cell means with pooled MSE (Prism-style) | `<ASSAY>_secondary_posthoc_cellmeans.csv` | Šidák across the selected pairs |
-| Time to event | do groups differ in how fast an event happens? | Cox (HR, 95% CI, LR tests), log-rank stratified by sex, KM medians | `<ASSAY>_time_to_event.csv`, `_summary.csv` | Holm across endpoints per term, within role |
+| Two-way ANOVA | group, sex, group x sex | OLS, Type II (config) | `<ASSAY>_secondary_two_way_anova.csv` | across endpoints per term, within role (5.2) |
+| Posthoc | which cells differ? | cell means with pooled MSE (Prism-style) | `<ASSAY>_secondary_posthoc_cellmeans.csv` | Šidák across the selected pairs; significant only if the corrected ANOVA supports it (below) |
+| Time to event | do groups differ in how fast an event happens? | Cox (HR, 95% CI, LR tests), log-rank stratified by sex, KM medians | `<ASSAY>_time_to_event.csv`, `_summary.csv` | across endpoints per term, within role (5.2) |
 | Correlations | are x and y related? | Spearman/Pearson (or OLS with robust SE) | `<ASSAY>_correlations.csv` | BH-FDR within spec |
 | Diagnostics | distributions, unequal variances, outliers | Brown–Forsythe, variance ratio, MAD-z, ROUT-like | `<ASSAY>_endpoint_diagnostics_by_*.csv`, `_flagged_points_*` | – (flags only, never excludes) |
-| Linear models | repeated sessions, covariates, unequal variances | nlme lme/gls, Type III | `outputs/<EXP>/MODELS/tables/<model>_*.csv` | Holm across endpoints per term, within role; Holm across contrasts |
+| Linear models | repeated sessions, covariates, unequal variances | nlme lme/gls, Type III | `outputs/<EXP>/MODELS/tables/<model>_*.csv` | across endpoints per term, within role (5.2); Holm across contrasts |
 
 ### 6.3 Designs: factors and levels
 
@@ -299,6 +366,11 @@ single-sex study set them to `[group]` in the experiment's plan; for three group
       - {factor: group, by: [sex]}   # every pair of groups within each sex; with one factor: by: []
   ```
   Šidák is applied over all comparisons of an endpoint.
+- Posthoc gate (`posthoc.gate_on_anova`, default on): a comparison of factor F is labelled
+  significant only if, for that endpoint, a corrected ANOVA term involving F (its main effect or the
+  interaction) has `p_adj < 0.05`. Otherwise `anova_gate = failed` and the label is `ns (ANOVA)`;
+  p-values are kept. Without the gate, Šidák-within-endpoint stars can appear where the corrected
+  ANOVA is not significant.
 - Time to event: a factor with more than two levels gets an omnibus likelihood-ratio test
   (term = factor, df = levels − 1) plus one hazard-ratio row per level against the reference
   (first level alphabetically), term `group[ifs vs control]`. Box plots and KM figures then show

@@ -4,10 +4,10 @@ import argparse
 from pathlib import Path
 from typing import Any
 
-import yaml
 
 from behaviour_stat_pipeline.figures.runner import run_figures_from_config
 from behaviour_stat_pipeline.common.exclusions import load_exclusions
+from behaviour_stat_pipeline.common.yaml_io import load_yaml_strict
 from behaviour_stat_pipeline.stats.common import (
     MOUSE_ID_COL,
     ConfigError,
@@ -24,8 +24,7 @@ def load_yaml(path: str | Path) -> dict[str, Any]:
     path = Path(path)
     if not path.exists():
         return {}
-    with path.open("r", encoding="utf-8") as f:
-        return yaml.safe_load(f) or {}
+    return load_yaml_strict(path)
 
 
 def resolve_assay_identity(assay: str, exp_cfg: dict) -> tuple[str, str]:

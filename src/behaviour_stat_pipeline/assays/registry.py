@@ -37,6 +37,11 @@ from behaviour_stat_pipeline.assays.nor import (
     NORConfig,
     summarize_nor_sanity,
 )
+from behaviour_stat_pipeline.assays.sit import (
+    derive_sit_metrics,
+    SITConfig,
+    summarize_sit_sanity,
+)
 from behaviour_stat_pipeline.assays.lm import (
     qc_lm,
     derive_lm_metrics,
@@ -476,22 +481,19 @@ class LMRunner(SingleSessionRunner):
         return derive_lm_metrics(long_df, cfg=LMConfig())
 
 
-class NORRunner(BaseAssayRunner):
-    assay_name = "NOR"
-    default_output = "data/processed/NOR_processed.csv"
-    
-    def nor_config(self, ctx: RunContext) -> NORConfig:
-        objects = ctx.instance_cfg.get("objects")
-        if not objects:
-            raise ValueError(
-                "NOR: the two object types are not configured. Set assay_instances.NOR.objects in the "
-                "experiment config, e.g. objects: [flask, lego_tower] (names as in the export columns)."
-            )
-        return NORConfig(objects=tuple(objects), min_explore_s=float(ctx.instance_cfg.get("min_explore_s", 20.0)))
+class FamTestRunner(BaseAssayRunner):
+    """
+    Two sessions per mouse, familiarisation (FAM) and test (TEST), in separate files chosen by
+    assay_instances.<NAME>.fam_pattern / test_pattern. Subclasses derive one row per mouse.
+    """
+
+    def derive_fam_test(self, fam: pd.DataFrame, test: pd.DataFrame, ctx: RunContext) -> tuple[pd.DataFrame, str]:
+        """-> (processed table, sanity summary)"""
+        raise NotImplementedError
 
     def run(self, ctx: RunContext) -> None:
         subjects = self.load_subjects_df(ctx)
-        cfg = self.nor_config(ctx)
+        name = self.assay_name
 
         fam_pattern = ctx.instance_cfg.get("fam_pattern", "*FAM*_output_summary.csv")
         test_pattern = ctx.instance_cfg.get("test_pattern", "*TEST*_output_summary.csv")
@@ -499,31 +501,25 @@ class NORRunner(BaseAssayRunner):
         test_files = sorted(ctx.root.rglob(test_pattern))
 
         if not fam_files:
-            raise FileNotFoundError(f"No FAM files found under {ctx.root} matching {fam_pattern} (assay_instances.NOR.fam_pattern)")
+            raise FileNotFoundError(f"No FAM files found under {ctx.root} matching {fam_pattern} (assay_instances.{name}.fam_pattern)")
         if not test_files:
-            raise FileNotFoundError(f"No TEST files found under {ctx.root} matching {test_pattern} (assay_instances.NOR.test_pattern)")
+            raise FileNotFoundError(f"No TEST files found under {ctx.root} matching {test_pattern} (assay_instances.{name}.test_pattern)")
         overlap = set(fam_files) & set(test_files)
         if overlap:
-            raise ValueError(f"NOR: files match both fam_pattern and test_pattern: {sorted(map(str, overlap))}")
+            raise ValueError(f"{name}: files match both fam_pattern and test_pattern: {sorted(map(str, overlap))}")
 
         fam = self._load_session(fam_files, "FAM", subjects, ctx.raw_id_col)
         test = self._load_session(test_files, "TEST", subjects, ctx.raw_id_col)
 
-        processed = derive_nor_metrics(
-            fam,
-            test,
-            schema_aliases=ctx.schema_aliases,
-            cfg=cfg,
-        )
-        sanity = summarize_nor_sanity(processed, min_total_s=cfg.min_explore_s)
+        processed, sanity = self.derive_fam_test(fam, test, ctx)
         print(sanity)
 
         out_path = self.output_path(ctx.out)
         out_path.parent.mkdir(parents=True, exist_ok=True)
 
         extra_lines = []
-        fam_cov = warn_missing_subjects_coverage(fam["mouse_id"], subjects, where="NOR FAM")
-        test_cov = warn_missing_subjects_coverage(test["mouse_id"], subjects, where="NOR TEST")
+        fam_cov = warn_missing_subjects_coverage(fam["mouse_id"], subjects, where=f"{name} FAM")
+        test_cov = warn_missing_subjects_coverage(test["mouse_id"], subjects, where=f"{name} TEST")
         for msg in (fam_cov, test_cov, sanity):
             if msg:
                 extra_lines.append(msg)
@@ -537,6 +533,45 @@ class NORRunner(BaseAssayRunner):
         )
         print(f"Saved: {res.out_csv}")
         print(f"Summary: {res.out_summary}")
+
+
+class NORRunner(FamTestRunner):
+    assay_name = "NOR"
+    default_output = "data/processed/NOR_processed.csv"
+
+    def nor_config(self, ctx: RunContext) -> NORConfig:
+        objects = ctx.instance_cfg.get("objects")
+        if not objects:
+            raise ValueError(
+                "NOR: the two object types are not configured. Set assay_instances.NOR.objects in the "
+                "experiment config, e.g. objects: [flask, lego_tower] (names as in the export columns)."
+            )
+        return NORConfig(objects=tuple(objects), min_explore_s=float(ctx.instance_cfg.get("min_explore_s", 20.0)))
+
+    def derive_fam_test(self, fam: pd.DataFrame, test: pd.DataFrame, ctx: RunContext) -> tuple[pd.DataFrame, str]:
+        cfg = self.nor_config(ctx)
+        processed = derive_nor_metrics(fam, test, schema_aliases=ctx.schema_aliases, cfg=cfg)
+        return processed, summarize_nor_sanity(processed, min_total_s=cfg.min_explore_s)
+
+
+class SITRunner(FamTestRunner):
+    """
+    Social interaction test: FAM with an empty mesh cage, TEST with a target mouse in it.
+    DI = target (TEST, first 2 min) vs empty cage (FAM), see assays/sit.py.
+    """
+    assay_name = "SIT"
+    default_output = "data/processed/SIT_processed.csv"
+
+    def derive_fam_test(self, fam: pd.DataFrame, test: pd.DataFrame, ctx: RunContext) -> tuple[pd.DataFrame, str]:
+        cfg = SITConfig(
+            min_explore_s=float(ctx.instance_cfg.get("min_explore_s", 20.0)),
+            min_tracked_fraction=float(ctx.instance_cfg.get("min_tracked_fraction", 0.9)),
+            test_window_s=float(ctx.instance_cfg.get("test_window_s", 120.0)),
+            target_col=ctx.instance_cfg.get("target_col"),
+        )
+        processed = derive_sit_metrics(fam, test, schema_aliases=ctx.schema_aliases, cfg=cfg)
+        return processed, summarize_sit_sanity(processed, cfg=cfg)
+
 
 class MISCRunner(BaseAssayRunner):
     assay_name = "MISC"
@@ -593,6 +628,7 @@ RUNNER_REGISTRY: dict[str, BaseAssayRunner] = {
     "SPL": SPLRunner(),
     "EPM": EPMRunner(),
     "NOR": NORRunner(),
+    "SIT": SITRunner(),
     "LM": LMRunner(),
     "MISC": MISCRunner(),
 }

@@ -20,6 +20,7 @@ Currently supported assays include:
 - VIT (Voluntary Interaction Test)
 - LM, MISC (adrenals, sucrose preference, tail suspension, marbles)
 - SPL (Sucrose Splash Test; ingested with the same parameters as OFT)
+- SIT (Social Interaction Test; FAM with empty cage vs TEST with target, ingested like NOR)
 
 ---
 
@@ -139,12 +140,14 @@ For results you will report, add `--require-clean`: the run refuses uncommitted 
 and a changed frozen analysis plan, so every table traces to a commit (`run_id` column ->
 `{ASSAY}_provenance.json`).
 
-### Primary vs exploratory endpoints
+### Primary, secondary and exploratory endpoints
 
 Declare the endpoints that test the experiment's hypotheses in
-`analysis.primary_endpoints` (by assay instance, assay type or linear-model name).
-Every output table has an `endpoint_role` column; primary and exploratory endpoints
-are corrected for multiple comparisons as separate families. To show the plan was fixed
+`analysis.primary_endpoints` and other preregistered outcomes in `analysis.secondary_endpoints`
+(by assay instance, assay type or linear-model name); everything else is exploratory.
+Every output table has an `endpoint_role` column; each role is its own multiple-comparison family
+(defaults: Holm for primary, Benjamini-Hochberg FDR for secondary and exploratory).
+Posthoc comparisons are labelled significant only where the corrected ANOVA supports them. To show the plan was fixed
 before the analysis, commit it and set `analysis_frozen_at: <commit sha>` in the
 experiment config; each run records whether the plan is unchanged since then.
 

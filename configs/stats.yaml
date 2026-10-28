@@ -20,6 +20,14 @@ factors:
   sex:
     column: sex         # order: secondary_two_way_anova.factor_orders.sex
 
+# Multiple comparisons. Endpoint roles come from the experiment's analysis plan
+# (primary_endpoints, secondary_endpoints; everything else is exploratory). Each role is a
+# separate family, corrected per model term across that role's endpoints:
+#   primary      Holm (family-wise error; the confirmatory claims)
+#   secondary    Benjamini-Hochberg FDR (supporting profile; did not set the sample size)
+#   exploratory  Benjamini-Hochberg FDR (hypothesis-generating; label as such)
+# correction_across_endpoints takes one method for all roles or a mapping naming every role.
+
 design:
   # These are COLUMN NAMES, not levels. Levels can be cup/tail OR stress/control etc.
   between_factors: [group, sex]
@@ -65,7 +73,7 @@ secondary_two_way_anova:
   type: 2
   include_interaction: true
   factors: [group, sex]
-  correction_across_endpoints: holm
+  correction_across_endpoints: {primary: holm, secondary: fdr_bh, exploratory: fdr_bh}
 
   factor_orders:
     sex: ["female", "male"]   # lock ordering
@@ -75,7 +83,8 @@ secondary_two_way_anova:
   posthoc:
     enabled: true
     method: cell_means_prism
-    correction: sidak
+    correction: sidak                 # within endpoint, across the selected pairs
+    gate_on_anova: true               # significant only where a term with the compared factor has p_adj < 0.05
     selected_pairs:
       - name: group_within_sex_0
         a: {group: 0, sex: 0}
@@ -98,7 +107,7 @@ time_to_event:
   enabled: true
   factors: [group, sex]
   duration_col: time_in_arena
-  correction_across_endpoints: holm
+  correction_across_endpoints: {primary: holm, secondary: fdr_bh, exploratory: fdr_bh}
 
   # endpoints: experiment config analysis.time_to_event.endpoints
 
@@ -114,7 +123,7 @@ time_to_event:
 linear_models:
   enabled: true
   rscript: null                       # null -> BSP_RSCRIPT env var, PATH, or standard install location
-  correction_across_endpoints: holm   # per term, across the model's endpoints
+  correction_across_endpoints: {primary: holm, secondary: fdr_bh, exploratory: fdr_bh}   # per term, across the model's endpoints
   contrast_correction: holm           # within endpoint, across the levels of `by`
 
   # models: experiment config analysis.linear_models.models

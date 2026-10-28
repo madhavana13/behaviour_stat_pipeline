@@ -115,6 +115,30 @@ oft: &oft_aliases
 # Replace `*oft_aliases` with its own `raw:` mapping if the SPL arena/zones ever differ.
 spl: *oft_aliases
 
+# Social interaction test (SIT): FAM = empty mesh cage (2 min), TEST = target mouse in the cage (5 min).
+# "(first 2 min)" measures cover the first 2 min of a session; the DI uses them for TEST.
+sit:
+  raw:
+    "time in arena": "total_time_in_arena"
+    "total distance moved": "total_distance_moved"
+    "average speed": "mean_speed"
+    "time in interaction zone": "time_in_interaction_zone"
+    "distance moved in interaction zone": "distance_moved_in_interaction_zone"
+    "average speed in interaction zone": "average_speed_in_interaction_zone"
+    "transitions into interaction zone": "transitions_into_interaction_zone"
+    "time exploring cage": "time_exploring_cage"
+    "bouts exploring cage": "bouts_exploring_cage"
+    "time in opposite corners": "time_in_opposite_corners"
+    "distance moved in opposite corners": "distance_moved_in_opposite_corners"
+    "average speed in opposite corners": "average_speed_in_opposite_corners"
+    "transitions into opposite corners": "transitions_into_opposite_corners"
+    "time in interaction zone (first 2 min)": "time_in_interaction_zone_first2min"
+    "transitions into interaction zone (first 2 min)": "transitions_into_interaction_zone_first2min"
+    "time exploring cage (first 2 min)": "time_exploring_cage_first2min"
+    "bouts exploring cage (first 2 min)": "bouts_exploring_cage_first2min"
+    "distance moved in interaction zone (first 2 min)": "distance_moved_in_interaction_zone_first2min"
+    "average speed in interaction zone (first 2 min)": "average_speed_in_interaction_zone_first2min"
+
 epm:
   raw:
     "average speed": "mean_speed"
@@ -169,6 +193,3 @@ lm:
     "classifications.Grooming.count": "grooming_count"
     "classifications.Digging.time": "digging_time"
     "classifications.Digging.count": "digging_count"
-
-sit:
-  raw: {}

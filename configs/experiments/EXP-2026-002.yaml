@@ -114,10 +114,10 @@ assay_instances:
 # Analysis plan for this experiment. Merged over configs/stats.yaml, which holds
 # method defaults only; lists here (endpoints, models, specs) replace the shared ones.
 #
-# primary_endpoints: per assay instance/type or linear-model name, the endpoints
-#   that test the experiment's hypotheses. Everything else is reported as
-#   exploratory. Primary and exploratory endpoints are corrected as separate
-#   families (column endpoint_role in every output table).
+# primary_endpoints / secondary_endpoints: per assay instance/type or linear-model
+#   name. Primary = the outcome(s) the sample size was calculated for; secondary =
+#   other preregistered outcomes; everything else is reported as exploratory. Each
+#   role is corrected as a separate family (column endpoint_role in every output table).
 #
 # To show the plan was fixed before analysis: commit this file, then set
 #   analysis_frozen_at: <commit sha>
@@ -136,6 +136,7 @@ analysis:
     - lm
     - misc
   primary_endpoints: {}
+  secondary_endpoints: {}
   primary_one_sample:
     nulls:
       nor:

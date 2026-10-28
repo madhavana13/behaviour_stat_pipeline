@@ -5,7 +5,8 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
-import yaml
+
+from behaviour_stat_pipeline.common.yaml_io import load_yaml_strict
 
 
 def _canonical_assay_key(assay: str | None, *, casefold: bool = True) -> str | None:
@@ -19,8 +20,7 @@ def load_schema_aliases(path: str | Path) -> dict[str, Any]:
     path = Path(path)
     if not path.exists():
         raise FileNotFoundError(f"Schema aliases file not found: {path}")
-    with path.open("r", encoding="utf-8") as f:
-        data = yaml.safe_load(f) or {}
+    data = load_yaml_strict(path)
     if not isinstance(data, dict):
         raise ValueError(f"Schema aliases file must parse to a dict: {path}")
     return data
